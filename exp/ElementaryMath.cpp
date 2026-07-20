@@ -79,6 +79,41 @@ bool findValidPairing(std::vector<std::pair<int,int>>&pairs,std::unordered_set<i
      return false;
 }
 
+//now recursive brute force explores 3 possibilities for every pair. that will give us TLE
+//as it will have 3^n complexity.
+//better way to solve this problem is to again think of bipartite matching. we have 2 sets
+//pairs and the values they produce. we can form a network of these values and then connect them
+//to the dummy source and the sink nodes and then apply max flow to find out how many unique 
+//max combinations can we generate. if the max is less than the number of pairs given to us then we can
+//be sure that the pairings do not have a possible ans
+typedef struct Node
+{
+     //for the pairing nodes
+     std::pair<int,int>p;
+     //for the operation result nodes
+     int val;
+     //for denoting the type of nodes
+     char type;
+
+     Node()
+     {
+
+     }
+
+     Node(std::pair<int,int>p,int val,char type)
+     {
+         this->p=p;
+         this->val=val;
+         this->type=type;
+     }
+
+     Node(int val,char type)
+     {
+         this->val=val;
+         this->type=type;
+     }
+}Node;
+
 void findCombination(std::vector<std::pair<int,int>>&pairs)
 {
      std::unordered_set<int> set;
@@ -97,6 +132,131 @@ void findCombination(std::vector<std::pair<int,int>>&pairs)
      }
 }
 
+
+int maxFlow(std::map<Node*,std::vector<std::pair<Node*,char>>>&network
+     ,std::unordered_map<Node*,std::unordered_map<Node*,int>>&capacity,std::unordered_map<Node*,bool>&visited
+     ,Node* node,int pushedFlow)
+{
+     if(node->type=='T')
+     {
+         //we have reached the sink through a valid path
+         return pushedFlow;
+     }
+     visited[node]=true;
+
+     for(std::pair<Node*,char>&neigh:network[node])
+     {
+         if(!visited[neigh.first]&&capacity[node][neigh.first]>0)
+         {
+             int allowedFlow=std::min(pushedFlow,capacity[node][neigh.first]);
+
+             int flow=maxFlow(network,capacity,visited,neigh.first,allowedFlow);
+
+             if(flow>0)
+             {
+                 //decrease the capacity of the normal edge by min allowed flow
+                 capacity[node][neigh.first]-=pushedFlow;
+                 //add the capacity to the residual edge
+                 capacity[neigh.first][node]+=pushedFlow;
+
+                 return flow;
+             }
+         }
+     }
+     //for no path to sink
+     return 0;
+}
+
+
+void findCombination2(std::vector<std::pair<int,int>>&pairs)
+{
+     //this is the  network of the pair  nodes and the resultant values that we get
+     //from performing operations on them
+     std::map<Node*,std::vector<std::pair<Node*,char>>>network;
+     std::unordered_map<int,Node*>map;
+     std::unordered_map<Node*,std::unordered_map<Node*,int>>capacity;
+     char op[]={'+','-','*'};
+     //building the network
+
+     Node* source=new Node(-1,'S');
+     Node* sink=new Node(-1,'T');
+     std::vector<Node*> orderedPairs;
+     for(std::pair<int,int>&p:pairs)
+     {
+         Node* newNode= new Node(p,-1,'P');   
+         orderedPairs.push_back(newNode);
+         //add the edge between the source and pair nodes
+         network[source].push_back(std::make_pair(newNode,'F'));
+         //mark the edge with capacity 1
+         capacity[source][newNode]=1;
+         //mark residual edge with capacity=0;
+         capacity[newNode][source]=0;
+         int val[]={p.first+p.second,p.first-p.second,p.first*p.second};
+         for(int i=0;i<3;i++)
+         {
+             if(map.find(val[i])==map.end())
+             {
+                 map[val[i]]=new Node(val[i],'R');
+                 //add edge between the res node and the sink
+                 network[map[val[i]]].push_back(std::make_pair(sink,'F'));
+                 //add the capacity of the edge to be 1
+                 capacity[map[val[i]]][sink]=1;
+                 //mark the capacity of the residual edge to be zero
+                 capacity[sink][map[val[i]]]=0;
+             }
+             //add edge between the pair node and the res node
+             network[newNode].push_back(std::make_pair(map[val[i]],op[i]));
+             //mark the original capacity of the node as 1
+             capacity[newNode][map[val[i]]]=1;
+
+             network[map[val[i]]].push_back(std::make_pair(newNode,op[i]));
+             //mark the capacity of the residual edge as 0
+             capacity[map[val[i]]][newNode]=0;
+         } 
+     }
+
+     int maxFlowInNetwork=0;
+     while(true)
+     {
+         std::unordered_map<Node*,bool>visited;
+         
+         for(auto key:network)
+         {
+             visited[key.first]=false;
+         }
+         int pushedFlow=maxFlow(network,capacity,visited,source,INT_MAX);
+
+         if(pushedFlow==0)
+         {
+             break;
+         }
+         maxFlowInNetwork+=pushedFlow;
+     }
+
+     if(maxFlowInNetwork!=pairs.size())
+     {
+         //all the pairs are not satisfied and there is no solution
+         std::cout<<maxFlowInNetwork<<"\n";
+         std::cout<<"Impossible\n";
+         return;
+     }
+
+     //std::cout<<"Possible\n";
+
+     for(Node* pNode : orderedPairs)
+     {
+         for(std::pair<Node*,char>&neigh : network[pNode])
+         {
+             // Skip the residual connection back to the Super Source (if it exists)
+             if(neigh.first->type != 'S' && capacity[pNode][neigh.first] == 0)
+             {
+                 std::cout << pNode->p.first << neigh.second << pNode->p.second << "=" << neigh.first->val << "\n";
+                 break;
+             }
+         }
+     }
+}
+
 void takeInput()
 {
      std::freopen("input.txt","r",stdin);
@@ -111,6 +271,7 @@ void takeInput()
          input.push_back(std::make_pair(u,v));
      }
      findCombination(input);
+     findCombination2(input);
 }
 
 int main()
@@ -160,3 +321,31 @@ std::unordered_map<int,std::pair<std::pair<int,int>,char>>map;
          id++;
      }
      std::cout<<"Possible\n";*/
+
+/*
+
+     std::cout<<"Printing the network\n";
+     for(auto nodes:network)
+     {
+         if(nodes.first->type=='P')
+         {
+             std::cout<<nodes.first->p.first<<" "<<nodes.first->p.second<<" -> ";
+         }
+         else
+         {
+             std::cout<<nodes.first->type<<" -> ";
+         }
+         for(std::pair<Node*,char>neigh:network[nodes.first])
+         {
+             if(neigh.first->type=='R')
+             {
+                 std::cout<<neigh.first->val<<" ";
+             }
+             else
+             {
+                 std::cout<<neigh.first->type<<" ";
+             }
+         }
+         std::cout<<"\n";
+     }
+*/
