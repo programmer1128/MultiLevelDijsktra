@@ -208,6 +208,9 @@ int runDinic(uint32_t total_nodes,const std::vector<uint32_t>& head,
          // Ensure it is large enough for the virtual nodes (initialized to 0 for S_NODE)
          deadEnds.resize(total_nodes + 2, 0); 
 
+         deadEnds[total_nodes]=0;     // S_NODE must start at 0
+         deadEnds[total_nodes+1]=0;
+
          if(!buildLevelGraph(total_nodes, head, edges, levels))
          {
              break;
@@ -237,70 +240,85 @@ CutResult findBestPartition(const std::vector<uint32_t>& current_cell_nodes,
                             std::vector<FlowEdge>& edges,
                             const std::vector<std::vector<double>>& p_value_lookup) 
 {
-    std::vector<double> margins = {0.1, 0.2, 0.3};
-    CutResult best_result;
-    best_result.score = std::numeric_limits<double>::max();
+     std::vector<double> margins = {0.1, 0.2, 0.3};
+     CutResult best_result;
+     best_result.score = std::numeric_limits<double>::max();
 
-    // 1. Outer Loop: Iterate through the 4 axes
-    for (int axis = 0; axis < 4; ++axis) 
-    {
+     //iterate through the 4 axes
+     for (int axis = 0; axis < 4; ++axis) 
+     {
          std::cout << "  [Axis " << axis << "] Sorting 24M nodes...\n";
 
-        std::vector<uint32_t> sorted_cell_nodes = current_cell_nodes;
+         std::vector<uint32_t> sorted_cell_nodes = current_cell_nodes;
         
-        // Sort based on physical geometry using the O(1) lookup table
-        std::sort(sorted_cell_nodes.begin(), sorted_cell_nodes.end(), 
-            [&](uint32_t a, uint32_t b) {
-                return p_value_lookup[axis][a] < p_value_lookup[axis][b];
-            });
+         // Sort based on physical geometry using the O(1) lookup table
+         std::sort(sorted_cell_nodes.begin(), sorted_cell_nodes.end(), 
+             [&](uint32_t a, uint32_t b) 
+             {
+                 return p_value_lookup[axis][a] < p_value_lookup[axis][b];
+             });
 
-        // 2. Inner Loop: Iterate through the margins
-        for (double alpha : margins) 
-        {
+         // 2. Inner Loop: Iterate through the margins
+         for (double alpha : margins) 
+         {
              std::cout << "    -> Testing margin " << (alpha * 100) << "%... " << std::flush;
-            source_targets.clear();
-            std::fill(is_sink.begin(), is_sink.end(), false);
+             source_targets.clear();
+             std::fill(is_sink.begin(), is_sink.end(), false);
             
-            for (auto& edge : edges) {
-                edge.flow = 0;
-            }
+             for (auto& edge : edges) 
+             {
+                 edge.flow = 0;
+             }
 
-            int k = static_cast<int>(sorted_cell_nodes.size() * alpha);
+             int k = static_cast<int>(sorted_cell_nodes.size() * alpha);
 
-            // Pin the extremes of the current subgraph
-            for (int i = 0; i < k; ++i) {
-                source_targets.push_back(sorted_cell_nodes[i]);
-            }
-            for (int i = sorted_cell_nodes.size() - k; i < sorted_cell_nodes.size(); ++i) {
-                is_sink[sorted_cell_nodes[i]] = true;
-            }
+             // Pin the extremes of the current subgraph
+             for (int i = 0; i < k; ++i) 
+             {
+                 source_targets.push_back(sorted_cell_nodes[i]);
+             }
+             for (int i = sorted_cell_nodes.size() - k; i < sorted_cell_nodes.size(); ++i) 
+             {
+                 is_sink[sorted_cell_nodes[i]] = true;
+             }
 
-            // Execute Dinic's Algorithm 
-            // (Assuming runDinic and extractPartitionA are implemented as discussed)
-            int cut_size = runDinic(total_nodes, head, edges);
-            std::cout << "Cut Size: " << cut_size << " edges severed.\n";
-            std::vector<bool> in_partition_A = extractPartitionA(total_nodes, head, edges);
+             // Execute Dinic's Algorithm 
+             // (Assuming runDinic and extractPartitionA are implemented as discussed)
+             int cut_size = runDinic(total_nodes, head, edges);
+             std::cout << "Cut Size: " << cut_size << " edges severed.\n";
+             std::vector<bool> in_partition_A = extractPartitionA(total_nodes, head, edges);
 
-            std::vector<uint32_t> part_A, part_B;
-            for (uint32_t node : current_cell_nodes) {
-                if (in_partition_A[node]) part_A.push_back(node);
-                else part_B.push_back(node);
-            }
+             std::vector<uint32_t> part_A, part_B;
+             for (uint32_t node : current_cell_nodes) 
+             {
+                 if (in_partition_A[node]) 
+                 {
+                     part_A.push_back(node);
+                 }
+                 else
+                 {
+                     part_B.push_back(node);
+                 } 
+             }
 
-            int balance = std::min(part_A.size(), part_B.size());
-            if (balance == 0) continue; 
+             int balance = std::min(part_A.size(), part_B.size());
+             if (balance == 0)
+             {
+                 continue;
+             } 
 
-            double current_score = static_cast<double>(cut_size) / balance;
+             double current_score = static_cast<double>(cut_size) / balance;
 
-            if (current_score < best_result.score) {
-                best_result.score = current_score;
-                best_result.cut_size = cut_size;
-                best_result.partition_A = part_A;
-                best_result.partition_B = part_B;
-            }
-        }
-    }
-    return best_result;
+             if (current_score < best_result.score) 
+             {
+                 best_result.score = current_score;
+                 best_result.cut_size = cut_size;
+                 best_result.partition_A = part_A;
+                 best_result.partition_B = part_B;
+             }
+         }
+     }
+     return best_result;
 }
 
 
@@ -310,39 +328,40 @@ void recursiveBisection(const std::vector<uint32_t>& cell_nodes, int level,
                         std::vector<FlowEdge>& edges,
                         const std::vector<std::vector<double>>& p_value_lookup) 
 {
-    const int MAX_CELL_SIZE = 5000;
+     const int MAX_CELL_SIZE = 5000;
 
-    if (cell_nodes.size() <= MAX_CELL_SIZE) 
-    {
-        for (uint32_t node : cell_nodes) {
-            node_cell_mapping[node] = global_cell_id;
-        }
-        global_cell_id++;
-        return;
-    }
+     if (cell_nodes.size() <= MAX_CELL_SIZE) 
+     {
+         for (uint32_t node : cell_nodes) 
+         {
+             node_cell_mapping[node] = global_cell_id;
+         }
+         global_cell_id++;
+         return;
+     }
 
-    std::cout << "[Level " << level << "] Bisecting cell of size " << cell_nodes.size() << "...\n";
+     std::cout << "[Level " << level << "] Bisecting cell of size " << cell_nodes.size() << "\n";
+ 
+     // Pass all arguments matching your updated signature
+     CutResult best_cut = findBestPartition(cell_nodes, projections, total_nodes, head, edges, p_value_lookup);
 
-    // Pass all arguments matching your updated signature
-    CutResult best_cut = findBestPartition(cell_nodes, projections, total_nodes, head, edges, p_value_lookup);
-
-    // Recurse on the two new sub-cells, passing the full signature down
-    recursiveBisection(best_cut.partition_A, level + 1, projections, total_nodes, head, edges, p_value_lookup);
-    recursiveBisection(best_cut.partition_B, level + 1, projections, total_nodes, head, edges, p_value_lookup);
+     // Recurse on the two new sub-cells, passing the full signature down
+     recursiveBisection(best_cut.partition_A, level + 1, projections, total_nodes, head, edges, p_value_lookup);
+     recursiveBisection(best_cut.partition_B, level + 1, projections, total_nodes, head, edges, p_value_lookup);
 }
 
 
 void savePartitionMapping(const std::string& filename, uint32_t total_nodes) 
 {
-    std::ofstream out_file(filename, std::ios::binary);
-    out_file.write(reinterpret_cast<const char*>(&total_nodes), sizeof(total_nodes));
-    out_file.write(reinterpret_cast<const char*>(node_cell_mapping.data()), 
+     std::ofstream out_file(filename, std::ios::binary);
+     out_file.write(reinterpret_cast<const char*>(&total_nodes), sizeof(total_nodes));
+     out_file.write(reinterpret_cast<const char*>(node_cell_mapping.data()), 
                    total_nodes * sizeof(uint32_t));
-    out_file.close();
+     out_file.close();
     
-    std::cout << "\nPartitioning Complete!\n";
-    std::cout << "Total unique cells created: " << global_cell_id << "\n";
-    std::cout << "Mapping saved to: " << filename << "\n";
+     std::cout << "\nPartitioning Complete!\n";
+     std::cout << "Total unique cells created: " << global_cell_id << "\n";
+     std::cout << "Mapping saved to: " << filename << "\n";
 }
 
 
@@ -350,48 +369,51 @@ void savePartitionMapping(const std::string& filename, uint32_t total_nodes)
 void loadCSRBinary(const std::string& filename, uint32_t& num_nodes, 
                    std::vector<uint32_t>& head, std::vector<FlowEdge>& edges) 
 {
-    std::ifstream in_file(filename, std::ios::binary);
-    if (!in_file) {
-        std::cerr << "Failed to open " << filename << "\n";
-        exit(1);
-    }
+     std::ifstream in_file(filename, std::ios::binary);
+     if (!in_file) 
+     {
+         std::cerr << "Failed to open " << filename << "\n";
+         exit(1);
+     }
 
-    uint32_t total_edges = 0;
-    in_file.read(reinterpret_cast<char*>(&num_nodes), sizeof(num_nodes));
-    in_file.read(reinterpret_cast<char*>(&total_edges), sizeof(total_edges));
+     uint32_t total_edges = 0;
+     in_file.read(reinterpret_cast<char*>(&num_nodes), sizeof(num_nodes));
+     in_file.read(reinterpret_cast<char*>(&total_edges), sizeof(total_edges));
 
-    head.resize(num_nodes + 1);
-    edges.resize(total_edges);
+     head.resize(num_nodes + 1);
+     edges.resize(total_edges);
 
-    in_file.read(reinterpret_cast<char*>(head.data()), head.size() * sizeof(uint32_t));
-    in_file.read(reinterpret_cast<char*>(edges.data()), edges.size() * sizeof(FlowEdge));
+     in_file.read(reinterpret_cast<char*>(head.data()), head.size() * sizeof(uint32_t));
+     in_file.read(reinterpret_cast<char*>(edges.data()), edges.size() * sizeof(FlowEdge));
     
-    in_file.close();
-    std::cout << "Loaded CSR: " << num_nodes << " nodes, " << total_edges << " edges.\n";
+     in_file.close();
+     std::cout << "Loaded CSR: " << num_nodes << " nodes, " << total_edges << " edges.\n";
 }
 
 void loadProjectionsBinary(const std::string& filename, 
                            std::vector<std::vector<ProjectedNode>>& sorted_projections) 
 {
-    std::ifstream in_file(filename, std::ios::binary);
-    if (!in_file) {
-        std::cerr << "Failed to open " << filename << "\n";
-        exit(1);
-    }
+     std::ifstream in_file(filename, std::ios::binary);
+     if (!in_file) 
+     {
+         std::cerr << "Failed to open " << filename << "\n";
+         exit(1);
+     }
 
-    uint32_t num_axes, num_nodes;
-    in_file.read(reinterpret_cast<char*>(&num_axes), sizeof(num_axes));
-    in_file.read(reinterpret_cast<char*>(&num_nodes), sizeof(num_nodes));
+     uint32_t num_axes, num_nodes;
+     in_file.read(reinterpret_cast<char*>(&num_axes), sizeof(num_axes));
+     in_file.read(reinterpret_cast<char*>(&num_nodes), sizeof(num_nodes));
 
-    sorted_projections.resize(num_axes);
-    for (uint32_t i = 0; i < num_axes; ++i) {
-        sorted_projections[i].resize(num_nodes);
-        in_file.read(reinterpret_cast<char*>(sorted_projections[i].data()), 
+     sorted_projections.resize(num_axes);
+     for (uint32_t i = 0; i < num_axes; ++i) 
+     {
+         sorted_projections[i].resize(num_nodes);
+         in_file.read(reinterpret_cast<char*>(sorted_projections[i].data()), 
                      num_nodes * sizeof(ProjectedNode));
-    }
+     }
     
-    in_file.close();
-    std::cout << "Loaded Projections for " << num_nodes << " nodes across " << num_axes << " axes.\n";
+     in_file.close();
+     std::cout << "Loaded Projections for " << num_nodes << " nodes across " << num_axes << " axes.\n";
 }
 
 
@@ -405,11 +427,11 @@ int main()
      std::vector<FlowEdge> edges;
      std::vector<std::vector<ProjectedNode>> sorted_projections;
 
-     // 1. Load the data
+     //Load the data
      loadCSRBinary(base_path + "csr_format.bin", num_nodes, head, edges);
      loadProjectionsBinary(base_path + "projections_format.bin", sorted_projections);
 
-     // 2. Initialize dynamic structures for Dinic's
+     //Initialize dynamic structures for Dinic's
      S_NODE = num_nodes; 
      T_NODE = num_nodes + 1;
      is_sink.resize(num_nodes + 2, false);
@@ -417,7 +439,7 @@ int main()
      // Resize the global mapping array
      node_cell_mapping.resize(num_nodes, 0);
 
-     // 3. Build the O(1) Projection Lookup Table
+     //Build the O(1) Projection Lookup Table
      std::cout << "Building O(1) projection lookup table...\n";
      std::vector<std::vector<double>> p_value_lookup(4, std::vector<double>(num_nodes));
      for (int axis = 0; axis < 4; ++axis) 
@@ -428,18 +450,18 @@ int main()
          }
      } 
 
-     // 4. Set up the initial "master cell" containing all nodes
+     //Set up the initial "master cell" containing all nodes
      std::vector<uint32_t> initial_cell(num_nodes);
      for (uint32_t i = 0; i < num_nodes; ++i) 
      {
          initial_cell[i] = i;
      }
 
-     // 5. Trigger the engine
+     //Trigger the engine
      std::cout << "\n--- Starting Inertial Flow Recursive Bisection ---\n";
      recursiveBisection(initial_cell, 0,sorted_projections,num_nodes,head,edges,p_value_lookup);
 
-     // 6. Save the final topology
+     //Save the final topology
      savePartitionMapping(base_path + "node_cell_mapping.bin", num_nodes);
 
     return 0;
