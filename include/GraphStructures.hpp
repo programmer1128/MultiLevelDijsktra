@@ -52,3 +52,55 @@ typedef struct ExpandedEdge
 
 std::vector<ExpandedNode> expandedNodes;
 std::vector<std::vector<ExpandedEdge>> expandedGraph;
+
+
+//this is used for the CSR format of graph storage to convert the graph before we feed it
+//to dinic algorithm for the partition
+typedef struct FlowEdge
+{
+      uint32_t to;
+      int32_t cap;
+      int32_t flow;
+      uint32_t rev_idx; // Index of the residual edge in the 'edges' array     
+}FlowEdge;
+
+std::vector<uint32_t> head;
+std::vector<FlowEdge> edges;
+
+
+typedef struct ProjectedNode
+{
+     uint32_t id;
+     double projectedValue;
+}ProjectedNode;
+
+
+//this struct is used in the Dinic partitioning of the graph for trying out all the 12 combinations
+//for 10,20,30% for every 4 projection axes and then storing the best set of partitions
+struct CutResult 
+{
+      double score;
+      int cut_size;
+      std::vector<uint32_t> partition_A;
+      std::vector<uint32_t> partition_B;
+};
+
+//used in the Dinic partitioner for the graph when the split is done
+struct LocalGraph 
+{
+      uint32_t num_nodes;
+      std::vector<uint32_t> head;
+      std::vector<FlowEdge> edges;
+      uint32_t local_source;
+      uint32_t local_sink;
+};
+
+
+//used in making the overlay graph which is the shortcut graph consisting of shortcuts between the
+//boundary nodes in a cell
+struct RoutingEdge 
+{
+      uint32_t to;
+      uint32_t weight; 
+};
+// This is the physical distance or travel time (e.g., in milliseconds or meters)
