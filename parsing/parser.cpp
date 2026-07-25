@@ -10,16 +10,17 @@
 #include<bits/stdc++.h>
 #include <osmium/index/map/sparse_mem_array.hpp>
 #include <osmium/handler/node_locations_for_ways.hpp>
-#include "/home/aritra/map-engine/MultiLevelDijsktra/include/GraphStructures.hpp"
+#include "/home/aritra/MultiLevelDijsktra/include/GraphStructures.hpp"
 
 // --- Data Structures ---
 
 // Represents an OSM Turn Restriction (e.g., No Left Turn)
-struct TurnRestriction {
-    uint64_t from_way_id;
-    uint64_t to_way_id;
-    uint64_t via_node_id;
-    std::string restriction_type; // e.g., "no_left_turn", "only_straight_on"
+struct TurnRestriction 
+{
+     uint64_t from_way_id;
+     uint64_t to_way_id;
+     uint64_t via_node_id;
+     std::string restriction_type; // e.g., "no_left_turn", "only_straight_on"
 };
 
 // Global storage for our parsed data
@@ -173,23 +174,39 @@ public:
                          speed_m_s = speed_kmh / 3.6f; // Convert km/h to m/s
                      } 
                  }
-                                // Finalize the segment
-                 ExpandedNode new_node;
-                 new_node.id = current_node_id++;
-                 new_node.originalId= way.id();
-                 new_node.start_osm_node_id = segment_start_osm_id;
-                 new_node.end_osm_node_id = node_ref.ref();
-                 new_node.distance_meters = segment_distance;
-                 new_node.wt = std::max(1u, static_cast<uint32_t>(segment_distance / speed_m_s));
-                 new_node.is_one_way = is_oneway;
-                 new_node.geometry = current_geometry;
-                 expandedNodes.push_back(new_node);
 
-                 // Reset for the next segment along this same OSM Way
-                 current_geometry.clear();
-                 current_geometry.push_back(coord); // The end of the last segment is the start of the next
-                 segment_start_osm_id = node_ref.ref();
-                 segment_distance = 0;
+                 ExpandedNode forward_node;
+                 forward_node.id = current_node_id++;
+                 forward_node.originalId = way.id();
+                 forward_node.start_osm_node_id = segment_start_osm_id;
+                 forward_node.end_osm_node_id = node_ref.ref();
+                 forward_node.distance_meters = segment_distance;
+                 forward_node.wt = std::max(1u, static_cast<uint32_t>(segment_distance / speed_m_s));
+                 forward_node.is_one_way = true; // Structurally, this node is now one-way
+                 forward_node.geometry = current_geometry;
+                 expandedNodes.push_back(forward_node);
+
+                 //If it is a two-way street, generate the rev segment
+                 if (!is_oneway) 
+                 {
+                     ExpandedNode reverse_node;
+                     reverse_node.id = current_node_id++;
+                     reverse_node.originalId = way.id();
+                    
+                     //swapping the start and end intersections
+                     reverse_node.start_osm_node_id = node_ref.ref();
+                     reverse_node.end_osm_node_id = segment_start_osm_id;
+                     
+                     reverse_node.distance_meters = segment_distance;
+                     reverse_node.wt = forward_node.wt;
+                     reverse_node.is_one_way = true; 
+                      
+                     //rev the geometry so the map draws it correctly
+                     reverse_node.geometry = current_geometry;
+                     std::reverse(reverse_node.geometry.begin(), reverse_node.geometry.end());
+                    
+                     expandedNodes.push_back(reverse_node);
+                 }
              }
          }
      }
@@ -200,7 +217,7 @@ public:
 
 int main() 
 {
-     std::string osm_file = "india-260712.osm.pbf";
+     std::string osm_file = "india-260724.osm.pbf";
     
      // --- Pass 1A: Count Node References (Ways) ---
      std::cout << "Pass 1A: Counting node references on all roads...\n";
@@ -241,6 +258,10 @@ int main()
      osmium::apply(pass2_reader, location_handler, pass2_handler);
      pass2_reader.close();
 
+
+     location_index.clear();
+     node_counts.clear();
+
      // --- Build the Edge-Expanded Graph ---
      std::cout << "Building turns (ExpandedEdges)...\n";
      expandedGraph.resize(expandedNodes.size());
@@ -250,11 +271,6 @@ int main()
      for (const auto& node : expandedNodes) 
      {
          intersection_to_segments[node.start_osm_node_id].push_back(node.id);
-         if (!node.is_one_way) 
-         {
-             // If it's a two-way street, vehicles can also enter it from its end node
-             intersection_to_segments[node.end_osm_node_id].push_back(node.id);
-         }
      }
 
 
@@ -272,34 +288,55 @@ int main()
 
              // --- ENFORCE TURN RESTRICTIONS (The "Baking" Step) ---
              bool turn_is_banned = false;
-            
+             bool has_only_restriction = false;
+             bool satisfies_only_restriction = false;
+
              for (const auto& restriction : turn_restrictions) 
              {
-                // Check if this specific maneuver matches a parsed OSM relation
-                 if (restriction.from_way_id == from_node.originalId &&
-                     restriction.to_way_id == to_node.originalId &&
-                     restriction.via_node_id == exit_intersection) 
+                 if (restriction.from_way_id == from_node.originalId && restriction.via_node_id == exit_intersection) 
                  {
-                    
-                     // For now, we are treating all restrictions (like "no_left_turn") as a complete ban.
-                     // In a massive system, you'd check restriction.restriction_type to handle "only_straight_on" logic.
-                     turn_is_banned = true;
-                     break;
+                     bool is_target_way = (restriction.to_way_id == to_node.originalId);
+                     
+                     if (restriction.restriction_type.find("only_") != std::string::npos) 
+                     {
+                         has_only_restriction = true;
+                         if (is_target_way) satisfies_only_restriction = true;
+                     } 
+                     else if (restriction.restriction_type.find("no_") != std::string::npos) 
+                     {
+                         if (is_target_way) turn_is_banned = true;
+                     }
                  }
              }
 
-             // If the relation says no, we skip creating the edge entirely!
+             // If there is an "only_" restriction, and this turn isn't it, ban it.
+             if (has_only_restriction && !satisfies_only_restriction) 
+             {
+                 turn_is_banned = true;
+             }
+
              if (turn_is_banned) 
              {
-                 continue; 
+                 continue;
              }
-            // -----------------------------------------------------
+             // -----------------------------------------------------
  
              // The turn is perfectly legal. Create the edge.
              ExpandedEdge turn;
-             turn.destNode= to_node_id;
-             turn.turnWeight = 2; // Default structural weight for Phase 1
- 
+             turn.destNode = to_node_id;
+
+             // --- U-TURN DETECTION ---
+             if (from_node.originalId == to_node.originalId) 
+             {
+                 turn.is_u_turn = true;
+                 turn.turnWeight = 120; // 120-second penalty (2 minutes) to strongly discourage U-turns
+             }  
+             else 
+             {
+                 turn.is_u_turn = false;
+                 turn.turnWeight = 2;   // Standard 2-second structural penalty for normal turns
+             }
+
              expandedGraph[from_node.id].push_back(turn);
          }
      }
@@ -309,28 +346,35 @@ int main()
 
 
 
-
+     intersection_to_segments.clear();
 
 
      std::cout << "Saving Graph to binary file...\n";
      std::ofstream out_file("engine_graph.bin", std::ios::binary);
 
-     // 1. Write total nodes
+     //write total nodes
      size_t total_nodes = expandedNodes.size();
      out_file.write(reinterpret_cast<const char*>(&total_nodes), sizeof(total_nodes));
 
      for (const auto& node : expandedNodes) 
      {
-         // Write node metadata
+         //all the meta data of the nodes and edges
          out_file.write(reinterpret_cast<const char*>(&node.id), sizeof(node.id));
+         out_file.write(reinterpret_cast<const char*>(&node.originalId), sizeof(node.originalId));
+         out_file.write(reinterpret_cast<const char*>(&node.start_osm_node_id), sizeof(node.start_osm_node_id));
+         out_file.write(reinterpret_cast<const char*>(&node.end_osm_node_id), sizeof(node.end_osm_node_id));
          out_file.write(reinterpret_cast<const char*>(&node.wt), sizeof(node.wt));
+         out_file.write(reinterpret_cast<const char*>(&node.distance_meters), sizeof(node.distance_meters));
+         out_file.write(reinterpret_cast<const char*>(&node.road_type), sizeof(node.road_type));
+         out_file.write(reinterpret_cast<const char*>(&node.name_id), sizeof(node.name_id));
+         out_file.write(reinterpret_cast<const char*>(&node.is_one_way), sizeof(node.is_one_way));
         
          // Write geometry array size, then the raw geometry bytes
          size_t geom_size = node.geometry.size();
          out_file.write(reinterpret_cast<const char*>(&geom_size), sizeof(geom_size));
          out_file.write(reinterpret_cast<const char*>(node.geometry.data()), geom_size * sizeof(Coordinate));
 
-         // Write edges for this node
+         // Write edges for this node (This writes the whole struct block safely)
          size_t edge_count = expandedGraph[node.id].size();
          out_file.write(reinterpret_cast<const char*>(&edge_count), sizeof(edge_count));
          out_file.write(reinterpret_cast<const char*>(expandedGraph[node.id].data()), edge_count * sizeof(ExpandedEdge));
