@@ -2,14 +2,7 @@
 #include "/home/aritra/MultiLevelDijsktra/include/GraphStructures.hpp"
 #include <chrono>
 
-struct LocalGraph 
-{
-     uint32_t num_nodes; // k + 2
-     std::vector<uint32_t> head;
-     std::vector<FlowEdge> edges;
-     uint32_t local_source;
-     uint32_t local_sink;
-};
+
 
 // Global tracking for the final partition results
 std::vector<uint32_t> node_cell_mapping;
@@ -20,8 +13,8 @@ LocalGraph buildInducedSubgraph(
     const std::vector<uint32_t>& cell_nodes,
     const std::vector<uint32_t>& global_head,
     const std::vector<FlowEdge>& global_edges,
-    const std::vector<uint32_t>& local_source_targets, // ALREADY Local IDs
-    const std::vector<bool>& local_is_sink,            // ALREADY Local IDs
+    const std::vector<uint32_t>& local_source_targets,
+    const std::vector<bool>& local_is_sink,
     const std::vector<int>& global_to_local            
 ) 
 {

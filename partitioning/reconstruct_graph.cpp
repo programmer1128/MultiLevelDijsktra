@@ -1,11 +1,7 @@
 #include<bits/stdc++.h>
 #include "/home/aritra/MultiLevelDijsktra/include/GraphStructures.hpp"
 
-typedef struct ProjectedNode
-{
-     uint32_t id;
-     double projectedValue;
-}ProjectedNode;
+
 
 enum ProjectionAxis 
 {
