@@ -430,7 +430,7 @@ int main()
      std::vector<FlowEdge> edges;
      std::vector<std::vector<ProjectedNode>> sorted_projections;
 
-     loadCSRBinary(base_path + "csr_format.bin", num_nodes, head, edges);
+     loadCSRBinary(base_path + "flow_csr.bin", num_nodes, head, edges);
      loadProjectionsBinary(base_path + "projections_format.bin", sorted_projections);
     
      node_cell_mapping.resize(num_nodes, 0);

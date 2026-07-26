@@ -5,7 +5,8 @@
 // We only store the projection values and a lightweight adjacency list
 
 
-enum ProjectionAxis {
+enum ProjectionAxis 
+{
      AXIS_0_DEG = 0,
      AXIS_90_DEG = 1,
      AXIS_45_DEG = 2,
