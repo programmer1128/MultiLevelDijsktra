@@ -97,7 +97,10 @@ int maxFlow(uint32_t u, int pushedFlow, uint32_t S_NODE, uint32_t T_NODE,
             const std::vector<uint32_t>& head, std::vector<FlowEdge>& edges, 
             std::vector<int>& levels, std::vector<uint32_t>& deadEnds)
 {
-     if (u == T_NODE || pushedFlow == 0) return pushedFlow;
+     if (u == T_NODE || pushedFlow == 0) 
+     {
+         return pushedFlow;
+     }
      
      if(u == S_NODE) 
      {

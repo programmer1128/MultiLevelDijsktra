@@ -60,6 +60,91 @@ std::vector<CellBoundaries> identifyBoundaries(uint32_t total_ebg_nodes, uint32_
      return cell_boundaries;
 }
 
+void dijkstra_Overlay_Graph(const std::vector<uint32_t>& routing_head, 
+     const std::vector<RoutingEdge>& routing_edges
+     ,const std::vector<uint16_t>&cell_ids, const std::vector<uint32_t>&exit_nodes,
+     std::vector<ShortcutEdge>& global_overlay_adj_bucket
+     ,uint32_t&source,uint16_t&curr_cell_id)
+{
+     auto cmp=[&](std::pair<uint32_t,uint32_t>&node1,std::pair<int,int>&node2)->bool
+     {
+         return node1.second>node2.second;
+     };
+
+     //declare the min heap for the dijkstra
+     std::priority_queue<std::pair<uint32_t,uint32_t>,std::vector<std::pair<uint32_t,uint32_t>>,decltype(cmp)>queue(cmp);
+
+     std::unordered_map<uint32_t, uint32_t> distanceTable;
+     std::unordered_map<uint32_t, uint32_t> parent;
+     distanceTable[source]=0;
+     parent[source]=source;
+
+     //offer up the source node
+     queue.push({source,0});
+
+     while(!queue.empty())
+     {
+         std::pair<int,int>node=queue.top();
+         uint32_t u=node.first;
+         uint32_t currDist=node.second;
+         queue.pop();
+
+         if(currDist>distanceTable[u])
+         {
+             continue;
+         }
+         //now the edges for the node will be between the heads[u] and heads[u+1]
+         //index of the routing edges array
+         uint32_t start=routing_head[u];
+         uint32_t end=routing_head[u+1];
+
+         for(uint32_t index=start;index<end;index++)
+         {
+             uint32_t v=routing_edges[index].to;
+             if(cell_ids[v]!=curr_cell_id)
+             {
+                 continue;
+             }
+             uint32_t wt=routing_edges[index].weight;
+
+             uint32_t dist=wt+distanceTable[u];
+
+             if(distanceTable.find(v)==distanceTable.end()||dist<distanceTable[v])
+             {
+                 //update the dist table
+                 distanceTable[v]=dist;
+                 //mark the path
+                 parent[v]=u;
+                 //push the node into queue.
+                 queue.push(std::make_pair(v,dist));
+             }
+         }
+     }
+
+        
+}
+
+
+
+//localised dijkstra to find the overlay graph using shortcuts in the same cell
+void find_Overlay_Graphs(std::vector<CellBoundaries>&cellBoundaries,std::vector<uint32_t>& routing_head
+     ,std::vector<RoutingEdge>& routing_edges,const std::vector<uint16_t>&cell_ids
+     )
+{
+     //for the cell boundaries vector, the index is the cell id and every index contains
+     //the cell with the incoming and the outgoing expanded nodes and for every one of them
+     //we have to apply the localised dijkstra and find the overlay graphs
+     for(uint16_t cell_id=0;cell_id<cellBoundaries.size();cell_id++)
+     {
+         for(uint32_t u:cellBoundaries[cell_id].entry_nodes)
+         {
+             dijkstra_Overlay_Graph(routing_head,routing_edges,cell_ids,cellBoundaries[cell_id].exit_nodes
+             ,global_overlay_adj_bucket,u,cell_id);
+         }
+     }
+}
+
+
 
 //load the CSR graph of the real graph 
 void loadRoutingCSR(const std::string& filepath, uint32_t& total_ebg_nodes, 
@@ -159,6 +244,13 @@ int main()
      //process Topology
      std::vector<CellBoundaries> cell_boundaries=identifyBoundaries(total_ebg_nodes, total_cells, 
                  cell_ids, routing_head, routing_edges);
+    
+     std::vector<std::vector<ShortcutEdge>> overlay_adj(total_ebg_nodes);
+
+     // overlay CSR Storage (Populated after Dijkstra finishes)
+     std::vector<uint32_t> overlay_head(total_ebg_nodes + 1, 0);
+     std::vector<ShortcutEdge> overlay_edges;
+
 
      return 0;
 }
