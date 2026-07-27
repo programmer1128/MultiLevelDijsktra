@@ -1,5 +1,5 @@
 #pragma once
-#include <vector>
+#include <bits/stdc++.h>
 #include <cstdint>
 
 enum ProjectionAxis 
@@ -195,3 +195,13 @@ struct CellBoundaries
      std::vector<uint32_t> entry_nodes;
      std::vector<uint32_t> exit_nodes;
 };
+
+//used for the creation of cliques and the shortcut edges for the overlay graph for every cell
+struct ShortcutEdge 
+{
+      uint32_t to;
+      uint32_t weight;
+      uint32_t middle_node_id; 
+};
+
+std::vector<ShortcutEdge>global_overlay_adj_bucket;
