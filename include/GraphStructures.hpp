@@ -2,6 +2,14 @@
 #include <vector>
 #include <cstdint>
 
+enum ProjectionAxis 
+{
+     AXIS_0_DEG = 0,
+     AXIS_90_DEG = 1,
+     AXIS_45_DEG = 2,
+     AXIS_135_DEG = 3
+};
+
 struct Coordinate 
 {
     double lat;
@@ -25,8 +33,15 @@ typedef struct ExpandedNode
      // Physical length of this road segment
      uint32_t distance_meters;
 
-     // Array of points for MapLibre to draw curved roads
-     std::vector<Coordinate> geometry;
+     // --- NEW: UI Data-Oriented Decoupling ---
+     // Replaces std::vector<Coordinate> geometry.
+     // Points directly to the memory-mappable "geometry.bin" flat array.
+     uint32_t geometry_offset;
+     uint32_t geometry_size;
+
+     // --- NEW: Partition Assignment ---
+     // Inherited from the NBG intersection node partition cut.
+     uint16_t cell_id;
 
      // Metadata
      uint8_t road_type;
@@ -104,3 +119,79 @@ struct RoutingEdge
       uint32_t weight; 
 };
 // This is the physical distance or travel time (e.g., in milliseconds or meters)
+
+
+
+
+/**
+ * @brief Represents a physical intersection or junction in the real world.
+ * 
+ * In a production engine, this graph is tiny compared to the Edge-Expanded version.
+ * This structure tracks the true physical location, which is critical for the 
+ * Inertial Flow / Dinic projection axes.
+ */
+struct NodeBasedNode 
+{
+       // Sequential internal 32-bit ID (0, 1, 2...) for fast array indexing
+       uint32_t id;
+
+       // The original 64-bit OSM node ID, essential for mapping turn restrictions
+       uint64_t osm_node_id;
+
+       // Physical location needed for distance calculations and partitioning projections
+       Coordinate coordinate;
+      
+       // Tracks the assigned cell after Dinic finishes partitioning the NBG.
+       // 0 means unassigned. Max 65,535 cells (perfect for multi-level mapping).
+       uint16_t cell_id; 
+};
+
+/**
+ * @brief Represents a physical road segment connecting two intersections.
+ * 
+ * Unlike the EBG (where edges are turns), edges here are actual streets.
+ * This struct is optimized to retain all UI metadata through compaction
+ * without holding heavy vector objects.
+ */
+struct NodeBasedEdge 
+{
+       // Points to the internal index of the NodeBasedNode this road leads to
+       uint32_t target_node_id;
+
+       // --- Metrics ---
+       uint32_t weight;          // Travel time weight (dynamic/GNN updatable)
+       uint32_t distance_meters; // Physical structural length
+
+       // --- Metadata Reference ---
+       uint64_t osm_way_id;      // The original OSM street ID (needed for turn restrictions)
+       uint32_t name_id;         // Offset pointer to string dictionary
+       uint8_t road_type;         // Functional classification (Motorway, Primary, etc.)
+
+       // --- UI Geometry References ---
+       // Instead of std::vector<Coordinate>, we track offsets in a global array.
+       // This allows Degree-2 compaction to merge paths without shifting heap memory.
+       uint32_t geometry_offset; 
+       uint32_t geometry_size;   
+
+       // --- Topography Flags ---
+       bool is_oneway;           // Tracks flow direction constraints
+};
+
+// --- In-Memory Construction Containers ---
+// During Phase 1 & 2, we use an adjacency list because we need to delete 
+// nodes and append edges dynamically during compaction. 
+// We will flatten this to CSR *only* when passing it to Dinic.
+std::vector<NodeBasedNode> nbgNodes;
+std::vector<std::vector<NodeBasedEdge>> nbgGraph;
+
+std::vector<Coordinate> global_geometry;
+// We will need a map to quickly find the NBG Node index using the OSM Node ID
+std::unordered_map<uint64_t, uint32_t> osm_to_nbg_index;
+
+
+//Structure to group a cell's boundary nodes for localized Dijkstra sweeps
+struct CellBoundaries 
+{
+     std::vector<uint32_t> entry_nodes;
+     std::vector<uint32_t> exit_nodes;
+};
