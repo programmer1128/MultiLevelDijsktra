@@ -1,129 +1,164 @@
-#include<bits/stdc++.h>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <limits>
+#include <chrono>
+#include <string>
 #include "/home/aritra/MultiLevelDijsktra/include/GraphStructures.hpp"
 
-uint32_t num_cells=9200;
+const uint32_t INF = std::numeric_limits<uint32_t>::max();
 
-void build_Overlay_Graph()
+
+std::vector<CellBoundaries> identifyBoundaries(uint32_t total_ebg_nodes, uint32_t total_cells,
+                                               const std::vector<uint16_t>& cell_ids,
+                                               const std::vector<uint32_t>& routing_head,
+                                               const std::vector<RoutingEdge>& routing_edges) 
 {
-     
-}
-
-
-void convert_To_Routing_CSR(const std::vector<ExpandedNode>& nodes, 
-                            const std::vector<std::vector<ExpandedEdge>>& graph, 
-                            std::vector<uint32_t>& head, 
-                            std::vector<RoutingEdge>& edges) 
-{
-     uint32_t total_nodes = graph.size();
+     std::cout << "Identifying cell boundary nodes\n";
+     std::vector<CellBoundaries> cell_boundaries(total_cells);
     
-     // Pass 1: Count total edges to allocate memory exactly once
-     uint32_t total_edges = 0;
-     for (uint32_t i = 0; i < total_nodes; ++i) 
-     {
-         total_edges += graph[i].size();
-     }
+     //the original graph network that we have is a expanded road network. so the roads are
+     //nodes and the edges are dir to a diff road.so we need to treat the nodes as the roads which 
+     //are coming in and out of a cell and then apply dijsktra on the localised graph of that cell
+     std::vector<bool> is_entry_node(total_ebg_nodes, false);
+     std::vector<bool> is_exit_node(total_ebg_nodes, false);
 
-     // Pre-allocate the exact RAM required
-     head.resize(total_nodes + 1, 0);
-     edges.resize(total_edges); 
-
-     // Pass 2: Flatten the 2D adjacency list into the 1D CSR arrays
-     uint32_t edge_idx = 0;
-     for (uint32_t i = 0; i < total_nodes; ++i) 
+     for (uint32_t u = 0; u < total_ebg_nodes; ++u) 
      {
-         head[i] = edge_idx;
-         for (const auto& exp_edge : graph[i]) 
+         uint16_t u_cell = cell_ids[u];
+         for (uint32_t e=routing_head[u];e<routing_head[u+1];++e) 
          {
-             // 1. Map the destination property correctly
-             edges[edge_idx].to = exp_edge.destNode;
-             
-             // 2. FUSE the turn penalty and the physical road traversal weight
-             edges[edge_idx].weight = exp_edge.turnWeight + nodes[exp_edge.destNode].wt; 
-             
-             edge_idx++;
+             uint32_t v = routing_edges[e].to;
+             uint16_t v_cell = cell_ids[v];
+
+             if (u_cell!=v_cell) 
+             {
+                 // u leaves its cell -> Exit Node
+                 if(!is_exit_node[u]) 
+                 {
+                     is_exit_node[u] = true;
+                     cell_boundaries[u_cell].exit_nodes.push_back(u);
+                 }
+                 //v enters a new cell -> Entry Node
+                 if (!is_entry_node[v])
+                 {
+                     is_entry_node[v] = true;
+                     cell_boundaries[v_cell].entry_nodes.push_back(v);
+                 }
+             }
          }
      }
-     // Cap the head array for the final node
-     head[total_nodes] = edge_idx; 
 
-     std::cout << "Successfully built Global Routing CSR with " << total_edges << " edges.\n";
+     uint64_t total_boundaries = 0;
+     for (const auto& cb : cell_boundaries) 
+     {
+         total_boundaries += cb.entry_nodes.size() + cb.exit_nodes.size();
+     }
+     std::cout << "Boundary discovery complete. Found " << total_boundaries << " global boundary points.\n";
+    
+     return cell_boundaries;
 }
 
 
-
-void loadNodeCellMapping(std::string&fileName,uint32_t&totalNodes,std::vector<uint32_t>&node_cell_mapping)
+//load the CSR graph of the real graph 
+void loadRoutingCSR(const std::string& filepath, uint32_t& total_ebg_nodes, 
+                    std::vector<uint32_t>& routing_head, std::vector<RoutingEdge>& routing_edges) 
 {
-     std::ifstream file(fileName,std::ios::binary);
-
-     if(!file)
+     std::cout << "Loading routing_csr.bin\n";
+     std::ifstream route_in(filepath, std::ios::binary);
+     if (!route_in) 
      {
-         std::cerr<<"Cannot be opened\n";
+         std::cerr << "Failed to open " << filepath << "\n";
          exit(1);
      }
-     //read the total number of nodes
-     file.read(reinterpret_cast<char*>(&totalNodes),sizeof(uint32_t));
-     
-     //resize the vector to allocate the ram before reading
-     node_cell_mapping.resize(totalNodes);
+    
+     uint32_t total_routing_edges=0;
+     route_in.read(reinterpret_cast<char*>(&total_ebg_nodes), sizeof(total_ebg_nodes));
+     route_in.read(reinterpret_cast<char*>(&total_routing_edges), sizeof(total_routing_edges));
 
-     //read the node cell mapping vector
-     file.read(reinterpret_cast<char*>(node_cell_mapping.data()),node_cell_mapping.size()*sizeof(uint32_t));
-
-     std::cout<<"Node cell mapping array loaded\n";
+     routing_head.resize(total_ebg_nodes + 1);
+     routing_edges.resize(total_routing_edges);
+    
+     route_in.read(reinterpret_cast<char*>(routing_head.data()), routing_head.size() * sizeof(uint32_t));
+     route_in.read(reinterpret_cast<char*>(routing_edges.data()), routing_edges.size() * sizeof(RoutingEdge));
+     route_in.close();
+    
+     std::cout << "Loaded " << total_ebg_nodes << " nodes, " << total_routing_edges << " edges.\n";
 }
 
 
-void load_Original_Graph_From_Binary(const std::string& filename, 
-                         std::vector<ExpandedNode>& nodes, 
-                         std::vector<std::vector<ExpandedEdge>>& graph) 
+//loading the assigned cell ids of the nodes 
+uint32_t loadCellIDs(const std::string& filepath, uint32_t total_ebg_nodes, std::vector<uint16_t>& cell_ids) 
 {
-     std::ifstream in_file(filename, std::ios::binary);
-     if (!in_file) 
+     std::cout << "Loading cell assignments from metadata.bin...\n";
+     std::ifstream meta_in(filepath, std::ios::binary);
+     if (!meta_in) 
      {
-         std::cerr << "Error: Failed to open " << filename << " for reading.\n";
-         return;
+         std::cerr << "Failed to open " << filepath << "\n";
+         exit(1);
      }
+    
+     size_t check_nodes = 0;
+     meta_in.read(reinterpret_cast<char*>(&check_nodes), sizeof(check_nodes));
+    
+     cell_ids.resize(total_ebg_nodes);
+     uint32_t max_cell_id = 0;
 
-     //Read total nodes
-     size_t total_nodes = 0;
-     in_file.read(reinterpret_cast<char*>(&total_nodes), sizeof(total_nodes));
-
-     //Pre-allocate the vectors to avoid reallocation overhead
-     nodes.resize(total_nodes);
-     graph.resize(total_nodes);
-
-     for(size_t i = 0; i < total_nodes; ++i) 
+     // Stream through metadata to extract just the cell_id array
+     for (size_t i = 0; i < total_ebg_nodes; ++i) 
      {
-         ExpandedNode node;
+         uint32_t id; uint64_t orig, s_osm, e_osm; uint32_t wt, dist;
+         uint8_t r_type; uint32_t n_id, g_off, g_sz; bool o_way;
+         
+         //read in stack temporary variables just to move the file pointer ahead
+         meta_in.read(reinterpret_cast<char*>(&id), sizeof(id));
+         meta_in.read(reinterpret_cast<char*>(&orig), sizeof(orig));
+         meta_in.read(reinterpret_cast<char*>(&s_osm), sizeof(s_osm));
+         meta_in.read(reinterpret_cast<char*>(&e_osm), sizeof(e_osm));
+         meta_in.read(reinterpret_cast<char*>(&wt), sizeof(wt));
+         meta_in.read(reinterpret_cast<char*>(&dist), sizeof(dist));
         
-         //Read node metadata
-         in_file.read(reinterpret_cast<char*>(&node.id), sizeof(node.id));
-         in_file.read(reinterpret_cast<char*>(&node.wt), sizeof(node.wt));
-        
-         //Read geometry array
-         size_t geom_size = 0;
-         in_file.read(reinterpret_cast<char*>(&geom_size), sizeof(geom_size));
-        
-         node.geometry.resize(geom_size);
-         in_file.read(reinterpret_cast<char*>(node.geometry.data()), geom_size * sizeof(Coordinate));
+         //read the req cell id from the file into the cell id array which we will use
+         //the index is the node_id itself and for every node_id we will have the cell id
+         //as cell_id[node_id]
+         meta_in.read(reinterpret_cast<char*>(&cell_ids[i]), sizeof(cell_ids[i]));
+         if (cell_ids[i] > max_cell_id) 
+         {
+             max_cell_id = cell_ids[i];
+         }
 
-         // Place the loaded node into the array
-         nodes[node.id] = node; 
-
-         //Read edges for this node
-         size_t edge_count = 0;
-         in_file.read(reinterpret_cast<char*>(&edge_count), sizeof(edge_count));
-        
-         graph[node.id].resize(edge_count);
-         in_file.read(reinterpret_cast<char*>(graph[node.id].data()), edge_count * sizeof(ExpandedEdge));
+         meta_in.read(reinterpret_cast<char*>(&r_type), sizeof(r_type));
+         meta_in.read(reinterpret_cast<char*>(&n_id), sizeof(n_id));
+         meta_in.read(reinterpret_cast<char*>(&o_way), sizeof(o_way));
+         meta_in.read(reinterpret_cast<char*>(&g_off), sizeof(g_off));
+         meta_in.read(reinterpret_cast<char*>(&g_sz), sizeof(g_sz));
      }
-
-     in_file.close();
-     std::cout << "Successfully loaded " << total_nodes << " nodes into memory.\n";
+     meta_in.close();
+    
+     uint32_t total_cells = max_cell_id + 1;
+     std::cout << "Total cells recognized: " << total_cells << "\n";
+     return total_cells;
 }
 
-int main()
+
+int main() 
 {
-     
-     return 0;  
+     std::string base_path = "/home/aritra/MultiLevelDijsktra/parsing/";
+
+     //data Structures
+     uint32_t total_ebg_nodes = 0;
+     std::vector<uint32_t> routing_head;
+     std::vector<RoutingEdge> routing_edges;
+     std::vector<uint16_t> cell_ids;
+
+     //load Data
+     loadRoutingCSR(base_path + "routing_csr.bin", total_ebg_nodes, routing_head, routing_edges);
+     uint32_t total_cells = loadCellIDs(base_path + "metadata.bin", total_ebg_nodes, cell_ids);
+
+     //process Topology
+     std::vector<CellBoundaries> cell_boundaries=identifyBoundaries(total_ebg_nodes, total_cells, 
+                 cell_ids, routing_head, routing_edges);
+
+     return 0;
 }
