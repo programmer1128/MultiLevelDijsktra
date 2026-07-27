@@ -1,0 +1,9 @@
+for parsers
+g++ -std=c++20 -O3 parser.cpp -o parser -lexpat -lz -lbz2 -lpthread
+
+for dinic
+g++ -O3 -std=c++20 Dinic_Partitioner.cpp -o partitioner
+
+for sticher code
+g++ -O3 -std=c++20 sticher.cpp -o sticher -lbz2 -lz -lexpat -lpthread
+./stitcher
