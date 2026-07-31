@@ -5,6 +5,7 @@
 #include <limits>
 #include <chrono>
 #include <string>
+#include<omp.h>
 #include "/home/aritra/MultiLevelDijsktra/include/GraphStructures.hpp"
 
 const uint32_t INF = std::numeric_limits<uint32_t>::max();
@@ -64,43 +65,47 @@ void dijkstra_Overlay_Graph(const std::vector<uint32_t>& routing_head,
      const std::vector<RoutingEdge>& routing_edges
      ,const std::vector<uint16_t>&cell_ids, const std::vector<uint32_t>&exit_nodes,
      std::vector<ShortcutEdge>& global_overlay_adj_bucket
-     ,uint32_t&source,uint16_t&curr_cell_id)
+     ,uint32_t source,uint16_t curr_cell_id)
 {
-     auto cmp=[&](std::pair<uint32_t,uint32_t>&node1,std::pair<int,int>&node2)->bool
+     //lamda function for the queue
+     auto cmp=[&](std::pair<uint32_t,uint32_t>&node1,std::pair<uint32_t,uint32_t>&node2)->bool
      {
          return node1.second>node2.second;
      };
 
+     //heap in c++ does not take a function as argument and instead takes a template for the argument
+     //so we need to pass the function as decltype with the function passed into the constructor
      //declare the min heap for the dijkstra
-     std::priority_queue<std::pair<uint32_t,uint32_t>,std::vector<std::pair<uint32_t,uint32_t>>,decltype(cmp)>queue(cmp);
+     std::priority_queue<std::pair<uint32_t,uint32_t>,
+         std::vector<std::pair<uint32_t,uint32_t>>,decltype(cmp)>queue(cmp);
 
      std::unordered_map<uint32_t, uint32_t> distanceTable;
-     std::unordered_map<uint32_t, uint32_t> parent;
+     //std::unordered_map<uint32_t, uint32_t> parent;
      distanceTable[source]=0;
-     parent[source]=source;
+     //parent[source]=source;
 
      //offer up the source node
      queue.push({source,0});
 
      while(!queue.empty())
      {
-         std::pair<int,int>node=queue.top();
-         uint32_t u=node.first;
-         uint32_t currDist=node.second;
+         auto [u, currDist] = queue.top();
          queue.pop();
-
+         //early stop optimisation
          if(currDist>distanceTable[u])
          {
              continue;
          }
          //now the edges for the node will be between the heads[u] and heads[u+1]
-         //index of the routing edges array
+         //index of the routing edges array for the CSR format
          uint32_t start=routing_head[u];
          uint32_t end=routing_head[u+1];
 
          for(uint32_t index=start;index<end;index++)
          {
              uint32_t v=routing_edges[index].to;
+             //if the nodes are not of the same cell then we do not need to add them to the 
+             //overlay graph and we can skip them
              if(cell_ids[v]!=curr_cell_id)
              {
                  continue;
@@ -114,34 +119,57 @@ void dijkstra_Overlay_Graph(const std::vector<uint32_t>& routing_head,
                  //update the dist table
                  distanceTable[v]=dist;
                  //mark the path
-                 parent[v]=u;
+                 //parent[v]=u;
                  //push the node into queue.
                  queue.push(std::make_pair(v,dist));
              }
          }
      }
 
-        
+     //now we have the shortest path to all the nodes of the cell from source by running
+     //the localised dijkstra. the path is tracked using the parent array
+     for (uint32_t target_exit : exit_nodes) 
+     {
+         if (target_exit == source) 
+         {
+             continue;
+         }
+         auto it = distanceTable.find(target_exit);
+         if(it!=distanceTable.end()) 
+         {
+             //valid path to this exit node
+             uint32_t total_weight = it->second;
+             // Create the shortcut and push it to this source node's bucket
+             global_overlay_adj_bucket.push_back({target_exit, total_weight});
+         }
+     }
+     
 }
 
 
 
 //localised dijkstra to find the overlay graph using shortcuts in the same cell
-void find_Overlay_Graphs(std::vector<CellBoundaries>&cellBoundaries,std::vector<uint32_t>& routing_head
-     ,std::vector<RoutingEdge>& routing_edges,const std::vector<uint16_t>&cell_ids
-     )
+void find_Overlay_Graphs(const std::vector<CellBoundaries>& cellBoundaries,
+                         const std::vector<uint32_t>& routing_head,
+                         const std::vector<RoutingEdge>& routing_edges,
+                         const std::vector<uint16_t>& cell_ids,
+                         std::vector<std::vector<ShortcutEdge>>& overlay_adj) 
 {
-     //for the cell boundaries vector, the index is the cell id and every index contains
-     //the cell with the incoming and the outgoing expanded nodes and for every one of them
-     //we have to apply the localised dijkstra and find the overlay graphs
-     for(uint16_t cell_id=0;cell_id<cellBoundaries.size();cell_id++)
+     std::cout << "Starting multi-threaded Dijkstra customization sweeps...\n";
+    
+     // The OpenMP Pragma for dynamic multi-threading
+     #pragma omp parallel for schedule(dynamic)
+     for(int cell_id = 0; cell_id < cellBoundaries.size(); cell_id++) 
      {
-         for(uint32_t u:cellBoundaries[cell_id].entry_nodes)
+         for(uint32_t u : cellBoundaries[cell_id].entry_nodes) 
          {
-             dijkstra_Overlay_Graph(routing_head,routing_edges,cell_ids,cellBoundaries[cell_id].exit_nodes
-             ,global_overlay_adj_bucket,u,cell_id);
+             // overlay_adj[u] is guaranteed thread-safe because no two threads will ever process the same 'u'
+             dijkstra_Overlay_Graph(routing_head, routing_edges, cell_ids, 
+                                   cellBoundaries[cell_id].exit_nodes, 
+                                   overlay_adj[u], u, cell_id);
          }
      }
+     std::cout << "Customization sweeps complete.\n";
 }
 
 
@@ -248,9 +276,43 @@ int main()
      std::vector<std::vector<ShortcutEdge>> overlay_adj(total_ebg_nodes);
 
      // overlay CSR Storage (Populated after Dijkstra finishes)
+     auto start_time = std::chrono::high_resolution_clock::now();
+     find_Overlay_Graphs(cell_boundaries, routing_head, routing_edges, cell_ids, overlay_adj);
+     auto end_time = std::chrono::high_resolution_clock::now();
+    
+     std::chrono::duration<double> duration = end_time - start_time;
+     std::cout << "Customization finished in " << duration.count() << " seconds.\n";
+
+     // --- Flattening and Serialization ---
+     std::cout << "Flattening overlay graph into CSR format...\n";
      std::vector<uint32_t> overlay_head(total_ebg_nodes + 1, 0);
      std::vector<ShortcutEdge> overlay_edges;
 
+     uint32_t current_edge_count = 0;
+     for (uint32_t i = 0; i < total_ebg_nodes; ++i) 
+     {
+         overlay_head[i] = current_edge_count;
+         for (const auto& shortcut : overlay_adj[i]) 
+         {
+             overlay_edges.push_back(shortcut);
+             current_edge_count++;
+         }
+     }
+     overlay_head[total_ebg_nodes] = current_edge_count; // Set the final boundary
+
+     std::cout << "Writing overlay graph to disk (Total Shortcuts: " << current_edge_count << ")...\n";
+    
+     std::ofstream head_out(base_path + "overlay_head.bin", std::ios::binary);
+     head_out.write(reinterpret_cast<const char*>(&total_ebg_nodes), sizeof(total_ebg_nodes));
+     head_out.write(reinterpret_cast<const char*>(&current_edge_count), sizeof(current_edge_count));
+     head_out.write(reinterpret_cast<const char*>(overlay_head.data()), overlay_head.size() * sizeof(uint32_t));
+     head_out.close();
+
+     std::ofstream edges_out(base_path + "overlay_edges.bin", std::ios::binary);
+     edges_out.write(reinterpret_cast<const char*>(overlay_edges.data()), overlay_edges.size() * sizeof(ShortcutEdge));
+     edges_out.close();
+
+     std::cout << "Overlay graph construction completely successfully!\n";
 
      return 0;
 }

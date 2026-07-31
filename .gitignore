@@ -1,2 +1,15 @@
-.bin
-.osm
+# Ignore all custom binary matrices and arrays
+*.bin
+
+# Ignore massive raw OSM map data
+*.pbf
+*.osm
+
+# Ignore massive visualization outputs and databases
+*.geojson
+*.gpkg
+
+# Ignore compiled C++ executables (add any specific binary names here)
+visualize_cuts
+a.out
+*.o

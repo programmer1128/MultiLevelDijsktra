@@ -33,13 +33,11 @@ typedef struct ExpandedNode
      // Physical length of this road segment
      uint32_t distance_meters;
 
-     // --- NEW: UI Data-Oriented Decoupling ---
      // Replaces std::vector<Coordinate> geometry.
      // Points directly to the memory-mappable "geometry.bin" flat array.
      uint32_t geometry_offset;
      uint32_t geometry_size;
 
-     // --- NEW: Partition Assignment ---
      // Inherited from the NBG intersection node partition cut.
      uint16_t cell_id;
 
@@ -201,7 +199,7 @@ struct ShortcutEdge
 {
       uint32_t to;
       uint32_t weight;
-      uint32_t middle_node_id; 
+      //uint32_t middle_node_id; 
 };
 
 std::vector<ShortcutEdge>global_overlay_adj_bucket;

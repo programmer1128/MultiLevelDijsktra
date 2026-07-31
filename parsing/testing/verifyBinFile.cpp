@@ -17,7 +17,7 @@ typedef struct ExpandedEdge {
 } ExpandedEdge;
 
 int main() {
-    std::string filename = "/home/aritra/map-engine/MultiLevelDijsktra/parsing/engine_graph.bin";
+    std::string filename = "/home/aritra/MultiLevelDijsktra/parsing/engine_graph.bin";
     std::ifstream in_file(filename, std::ios::binary);
 
     if (!in_file) {
