@@ -148,7 +148,30 @@ public:
              is_oneway = true;
          }
 
-         float speed_m_s = 11.0f; // Default 40 km/h
+         const char* highway_tag_ptr = way.tags().get_value_by_key("highway");
+         std::string highway_tag = highway_tag_ptr ? highway_tag_ptr : "";
+
+         float speed_m_s = 8.33f; // Default to ~30 km/h for unknown/minor roads
+         uint8_t type_id = 0;     // Default classification (Residential/Other)
+
+         if (highway_tag == "motorway" || highway_tag == "trunk") {
+             speed_m_s = 22.22f; // 80 km/h
+             type_id = 4;        // Major Highways
+         } else if (highway_tag == "primary") {
+             speed_m_s = 13.88f; // 50 km/h
+             type_id = 3;        // Arterial Main Roads (e.g., Diamond Harbour Road)
+         } else if (highway_tag == "secondary" || highway_tag == "tertiary") {
+             speed_m_s = 11.11f; // 40 km/h
+             type_id = 2;        // Connector Streets
+         } else if (highway_tag == "residential") {
+             speed_m_s = 4.16f;  // 15 km/h (Slows down Dijkstra, pushes it to main roads)
+             type_id = 1;        // Local/Colony Streets
+         } else if (highway_tag == "footway" || highway_tag == "path" || highway_tag == "pedestrian") {
+             speed_m_s = 1.38f;  // 5 km/h (Forces routing engine out of Maidan parks/fields)
+             type_id = 5;        // Restricted/Non-drivable paths
+         }
+
+         // Override speed if an explicit maxspeed tag exists
          const char* maxspeed_tag = way.tags().get_value_by_key("maxspeed");
          if (maxspeed_tag) {
              int speed_kmh = std::atoi(maxspeed_tag);
@@ -191,9 +214,15 @@ public:
                  NodeBasedEdge forward_edge;
                  forward_edge.target_node_id = segment_end_nbg_id;
                  forward_edge.distance_meters = segment_distance;
+                 
+                 // Dynamic weight based on its hierarchy category 
                  forward_edge.weight = std::max(1u, static_cast<uint32_t>(segment_distance / speed_m_s));
+                 
                  forward_edge.osm_way_id = way.id();
-                 forward_edge.road_type = 0; // Replace with highway tag mapper if needed
+                 
+                 // 2. PASS HIERARCHICAL TYPE ID TO EMBED AS GNN FEATURE
+                 forward_edge.road_type = type_id; 
+                 
                  forward_edge.name_id = 0;   // Replace with string dictionary mapper
                  forward_edge.is_oneway = is_oneway;
                  forward_edge.geometry_offset = current_geometry_offset;
@@ -201,10 +230,10 @@ public:
 
                  nbgGraph[segment_start_nbg_id].push_back(forward_edge);
 
-                 // 2. If two-way, create the Reverse Edge
+                 // 3. If two-way, create the Reverse Edge
                  if (!is_oneway) 
                  {
-                     NodeBasedEdge reverse_edge = forward_edge; // Copy all metrics
+                     NodeBasedEdge reverse_edge = forward_edge; // Copy all metrics including updated road_type
                      reverse_edge.target_node_id = segment_start_nbg_id; // Point backward
                      nbgGraph[segment_end_nbg_id].push_back(reverse_edge);
                  }
@@ -353,6 +382,74 @@ int main()
      // PHASE 3.5: BRIDGE - CONVERTING NBG ROADS INTO EBG NODES
      // ========================================================================
      std::cout << "Phase 3.5: Transforming NBG topology into Edge-Based Graph (EBG) nodes...\n";
+
+     //std::cout << "Phase 3.5: Transforming NBG topology into Edge-Based Graph (EBG) nodes...\n";
+
+     // FIX: Load the existing cell mappings to preserve partitions without rerunning Dinic!
+     //std::cout << "Phase 3.5: Transforming NBG topology into Edge-Based Graph (EBG) nodes...\n";
+
+     // FIX: Load the existing cell mappings to preserve partitions without rerunning Dinic!
+     // start of hot load
+
+     // FIX: Load the existing cell mappings to preserve partitions without rerunning Dinic!
+     // start of hot load
+     std::ifstream cell_in("node_cell_mapping.bin", std::ios::binary | std::ios::ate);
+     if (cell_in) 
+     {
+         std::streamsize file_size = cell_in.tellg();
+         std::streamsize expected_size_no_header = static_cast<std::streamsize>(nbg_nodes_count * sizeof(uint32_t));
+         std::streamsize expected_size_with_header = expected_size_no_header + sizeof(uint32_t);
+
+         // Rewind to start processing
+         cell_in.seekg(0, std::ios::beg);
+
+         // Scenario A: File has a 4-byte metadata count header at the beginning
+         if (file_size == expected_size_with_header) 
+         {
+             uint32_t header_node_count = 0;
+             cell_in.read(reinterpret_cast<char*>(&header_node_count), sizeof(uint32_t));
+             std::cout << "--> Detected 4-byte file header. Partitioner states count is: " << header_node_count << "\n";
+
+             if (header_node_count != nbg_nodes_count) 
+             {
+                 std::cerr << "CRITICAL ERROR: Header node count (" << header_node_count 
+                           << ") doesn't match current graph nodes (" << nbg_nodes_count << ")!\n";
+                 return -1;
+             }
+         }
+         // Scenario B: File is a raw array without a header (Flat size match)
+         else if (file_size == expected_size_no_header)
+         {
+             std::cout << "--> Detected raw binary array format (no header present).\n";
+         }
+         // Scenario C: True size corruption or mismatched PBF data source
+         else 
+         {
+             std::cerr << "\n========================================================\n";
+             std::cerr << "CRITICAL ERROR: node_cell_mapping.bin size mismatch!\n";
+             std::cerr << "Expected: " << expected_size_no_header << " (raw) or " << expected_size_with_header << " (headed) bytes.\n";
+             std::cerr << "Got: " << file_size << " bytes.\n";
+             std::cerr << "========================================================\n";
+             return -1;
+         }
+
+         // Read the actual partition array data safely
+         std::vector<uint32_t> cell_mappings(nbg_nodes_count);
+         cell_in.read(reinterpret_cast<char*>(cell_mappings.data()), expected_size_no_header);
+         
+         for (uint32_t i = 0; i < nbg_nodes_count; ++i) 
+         {
+             nbgNodes[i].cell_id = cell_mappings[i];
+         }
+         std::cout << "--> Successfully injected existing node_cell_mapping.bin into NBG structures!\n";
+     } 
+     else 
+     {
+         std::cerr << "--> CRITICAL ERROR: node_cell_mapping.bin not found!\n";
+         return -1; 
+     }
+     // end of hot load
+
 
      uint32_t current_expanded_node_id = 0;
      
