@@ -83,8 +83,11 @@ public:
         }
 
         // Only save it if it has all three required components
-        if (tr.from_way_id != 0 && tr.to_way_id != 0 && tr.via_node_id != 0) {
+       if (tr.from_way_id != 0 && tr.to_way_id != 0 && tr.via_node_id != 0) {
             turn_restrictions.push_back(tr);
+            
+            // ADD THIS: Force a graph split at the restriction point
+            node_counts[tr.via_node_id] = 2; 
         }
     }
 };
@@ -228,16 +231,21 @@ public:
                  forward_edge.geometry_offset = current_geometry_offset;
                  forward_edge.geometry_size = current_geometry_size;
 
+                 forward_edge.is_reverse_geometry = false;
+
                  nbgGraph[segment_start_nbg_id].push_back(forward_edge);
 
                  // 3. If two-way, create the Reverse Edge
                  if (!is_oneway) 
                  {
-                     NodeBasedEdge reverse_edge = forward_edge; // Copy all metrics including updated road_type
-                     reverse_edge.target_node_id = segment_start_nbg_id; // Point backward
+                     NodeBasedEdge reverse_edge = forward_edge; 
+                     reverse_edge.target_node_id = segment_start_nbg_id; 
+                     
+                     // ADD THIS: Reverse edge travels backward through the array
+                     reverse_edge.is_reverse_geometry = true; 
+                     
                      nbgGraph[segment_end_nbg_id].push_back(reverse_edge);
                  }
-
                  // Reset for the next segment along this OSM Way
                  segment_start_nbg_id = segment_end_nbg_id;
                  segment_distance = 0;
@@ -478,6 +486,7 @@ int main()
              // Geometry index maps (No actual vector reallocations!)
              exp_node.geometry_offset = nbg_edge.geometry_offset;
              exp_node.geometry_size = nbg_edge.geometry_size;
+             exp_node.is_reverse_geometry = nbg_edge.is_reverse_geometry;
              
              // Map cell assignments directly via originating NBG node
              exp_node.cell_id = nbgNodes[u].cell_id;
@@ -529,6 +538,8 @@ int main()
          meta_out.write(reinterpret_cast<const char*>(&node.road_type), sizeof(node.road_type));
          meta_out.write(reinterpret_cast<const char*>(&node.name_id), sizeof(node.name_id));
          meta_out.write(reinterpret_cast<const char*>(&node.is_one_way), sizeof(node.is_one_way));
+
+         meta_out.write(reinterpret_cast<const char*>(&node.is_reverse_geometry), sizeof(node.is_reverse_geometry));
          meta_out.write(reinterpret_cast<const char*>(&node.geometry_offset), sizeof(node.geometry_offset));
          meta_out.write(reinterpret_cast<const char*>(&node.geometry_size), sizeof(node.geometry_size));
      }
@@ -574,12 +585,15 @@ int main()
  
              ExpandedEdge turn;
              turn.destNode = to_node_id;
-             if (from_node.originalId == to_node.originalId) {
+             if (to_node.end_osm_node_id == from_node.start_osm_node_id) 
+             {
                  turn.is_u_turn = true;
-                 turn.turnWeight = 120; // 2-minute penalty for U-turns[cite: 7]
-             } else {
+                 turn.turnWeight = 45; // Sane penalty prevents loops but allows forced routing
+             } 
+             else 
+             {
                  turn.is_u_turn = false;
-                 turn.turnWeight = 2;   // 2-second standard cost intersection traversal[cite: 7]
+                 turn.turnWeight = 2;  
              }
              expandedGraph[from_node.id].push_back(turn);
          }

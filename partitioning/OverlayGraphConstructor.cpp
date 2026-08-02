@@ -223,7 +223,7 @@ uint32_t loadCellIDs(const std::string& filepath, uint32_t total_ebg_nodes, std:
      {
          uint32_t id; uint64_t orig, s_osm, e_osm; uint32_t wt, dist;
          uint8_t r_type; uint32_t n_id, g_off, g_sz; bool o_way;
-         
+         bool rev_geom;
          //read in stack temporary variables just to move the file pointer ahead
          meta_in.read(reinterpret_cast<char*>(&id), sizeof(id));
          meta_in.read(reinterpret_cast<char*>(&orig), sizeof(orig));
@@ -244,6 +244,7 @@ uint32_t loadCellIDs(const std::string& filepath, uint32_t total_ebg_nodes, std:
          meta_in.read(reinterpret_cast<char*>(&r_type), sizeof(r_type));
          meta_in.read(reinterpret_cast<char*>(&n_id), sizeof(n_id));
          meta_in.read(reinterpret_cast<char*>(&o_way), sizeof(o_way));
+         meta_in.read(reinterpret_cast<char*>(&rev_geom), sizeof(rev_geom));
          meta_in.read(reinterpret_cast<char*>(&g_off), sizeof(g_off));
          meta_in.read(reinterpret_cast<char*>(&g_sz), sizeof(g_sz));
      }

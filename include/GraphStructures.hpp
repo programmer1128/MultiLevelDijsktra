@@ -46,6 +46,7 @@ typedef struct ExpandedNode
      uint32_t name_id;
 
      bool is_one_way;
+     bool is_reverse_geometry;
 } ExpandedNode;
 
 typedef struct ExpandedEdge 
@@ -173,6 +174,7 @@ struct NodeBasedEdge
 
        // --- Topography Flags ---
        bool is_oneway;           // Tracks flow direction constraints
+       bool is_reverse_geometry; 
 };
 
 // --- In-Memory Construction Containers ---

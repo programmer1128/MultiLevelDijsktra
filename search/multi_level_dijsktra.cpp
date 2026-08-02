@@ -3,8 +3,9 @@
 
 struct EBG_Metadata 
 {
-    uint32_t geometry_offset;
-    uint32_t geometry_size;
+     bool is_reverse_geometry;
+     uint32_t geometry_offset;
+     uint32_t geometry_size;
 };
 
 struct RoutingData 
@@ -513,6 +514,7 @@ void load_all_routing_data(const std::string& directory, RoutingData& data)
             meta_in.seekg(44, std::ios::cur); 
             
             // Now read the two fields we actually need
+            meta_in.read(reinterpret_cast<char*>(&data.node_metadata[i].is_reverse_geometry), sizeof(bool));
             meta_in.read(reinterpret_cast<char*>(&data.node_metadata[i].geometry_offset), sizeof(uint32_t));
             meta_in.read(reinterpret_cast<char*>(&data.node_metadata[i].geometry_size), sizeof(uint32_t));
         }
@@ -529,100 +531,37 @@ void export_path_to_geojson(const std::vector<uint32_t>& detailed_path,
                             const std::vector<EBG_Metadata>& ebg_metadata, 
                             const std::string& output_filename) 
 {
-    if (detailed_path.empty() || global_coords.empty() || ebg_metadata.empty()) 
-    {
-        std::cout << "Cannot export empty path or missing coordinates.\n";
-        return;
-    }
-
     std::ofstream out(output_filename);
-    if (!out) 
-    {
-        std::cerr << "Failed to open output file for GeoJSON!\n";
-        return;
-    }
+    if (!out) return;
 
-    // GeoJSON Boilerplate
-    out << "{\n";
-    out << "  \"type\": \"FeatureCollection\",\n";
-    out << "  \"features\": [\n";
-    out << "    {\n";
-    out << "      \"type\": \"Feature\",\n";
-    out << "      \"properties\": {\n";
-    out << "        \"name\": \"Multi-Level Dijkstra Route\",\n";
-    out << "        \"node_count\": " << detailed_path.size() << "\n";
-    out << "      },\n";
-    out << "      \"geometry\": {\n";
-    out << "        \"type\": \"LineString\",\n";
-    out << "        \"coordinates\": [\n";
+    out << "{\n  \"type\": \"FeatureCollection\",\n  \"features\": [\n    {\n      \"type\": \"Feature\",\n";
+    out << "      \"properties\": {\"name\": \"Route\"},\n      \"geometry\": {\n        \"type\": \"LineString\",\n        \"coordinates\": [\n";
 
     bool first_coord = true;
-    double pen_lon = 0.0;
-    double pen_lat = 0.0;
 
     for (size_t i = 0; i < detailed_path.size(); ++i) 
     {
         uint32_t ebg_node_id = detailed_path[i];
-        
-        // Safety bounds check
         if (ebg_node_id >= ebg_metadata.size()) continue;
 
+        bool reverse_order = ebg_metadata[ebg_node_id].is_reverse_geometry;
         uint32_t offset = ebg_metadata[ebg_node_id].geometry_offset;
         uint32_t size = ebg_metadata[ebg_node_id].geometry_size;
 
-        if (size == 0) continue;
-
-        bool reverse_order = false;
-
-        // Auto-detect direction: If the end of this array is closer to our current position 
-        // than the beginning, we are traversing this two-way street in reverse!
-        if (!first_coord) 
-        {
-            double dx_first = pen_lon - global_coords[offset].lon;
-            double dy_first = pen_lat - global_coords[offset].lat;
-            double dist_to_first = (dx_first * dx_first) + (dy_first * dy_first);
-
-            double dx_last = pen_lon - global_coords[offset + size - 1].lon;
-            double dy_last = pen_lat - global_coords[offset + size - 1].lat;
-            double dist_to_last = (dx_last * dx_last) + (dy_last * dy_last);
-
-            if (dist_to_last < dist_to_first) 
-            {
-                reverse_order = true;
-            }
-        }
-
-        // Draw every physical point that makes up this road segment
         for (uint32_t j = 0; j < size; ++j) 
         {
-            // If traveling backwards, invert the array index reading
             uint32_t index = reverse_order ? (offset + size - 1 - j) : (offset + j);
-            
             if (index >= global_coords.size()) continue;
 
-            if (!first_coord) {
-                out << ",\n";
-            }
-            
-            // Update the "pen" position to our current coordinate
-            pen_lon = global_coords[index].lon;
-            pen_lat = global_coords[index].lat;
-
-            out << "          [" << pen_lon << ", " << pen_lat << "]";
+            if (!first_coord) out << ",\n";
+            out << "          [" << global_coords[index].lon << ", " << global_coords[index].lat << "]";
             first_coord = false;
         }
     }
 
-    out << "\n        ]\n";
-    out << "      }\n";
-    out << "    }\n";
-    out << "  ]\n";
-    out << "}\n";
-
+    out << "\n        ]\n      }\n    }\n  ]\n}\n";
     out.close();
-    std::cout << "Successfully exported flawlessly chained route to " << output_filename << "\n";
 }
-
 
 
 
