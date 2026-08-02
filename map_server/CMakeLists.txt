@@ -1,83 +1,63 @@
 cmake_minimum_required(VERSION 3.5)
 project(map_server CXX)
 
-include(CheckIncludeFileCXX)
-
-check_include_file_cxx(any HAS_ANY)
-check_include_file_cxx(string_view HAS_STRING_VIEW)
-check_include_file_cxx(coroutine HAS_COROUTINE)
-if (NOT "${CMAKE_CXX_STANDARD}" STREQUAL "")
-    # Do nothing
-elseif (HAS_ANY AND HAS_STRING_VIEW AND HAS_COROUTINE)
-    set(CMAKE_CXX_STANDARD 20)
-elseif (HAS_ANY AND HAS_STRING_VIEW)
-    set(CMAKE_CXX_STANDARD 17)
-else ()
-    set(CMAKE_CXX_STANDARD 14)
-endif ()
-
+# Force C++20 for Coroutines
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(CheckIncludeFileCXX)
+
+# Find External Dependencies
+find_package(Drogon CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
+
+# Recursively collect all source files (.cpp, .cc, .c)
+aux_source_directory(controllers CTL_SRC)
+aux_source_directory(filters FILTER_SRC)
+aux_source_directory(plugins PLUGIN_SRC)
+aux_source_directory(models MODEL_SRC)
+aux_source_directory(load_data DATA_SRC)   # Add this
+aux_source_directory(search SEARCH_SRC)    # Add this
+
+# ==============================================================================
+# 1. CREATE THE EXECUTABLE TARGET FIRST
+# ==============================================================================
 add_executable(${PROJECT_NAME} main.cc)
 
-# ##############################################################################
-# If you include the drogon source code locally in your project, use this method
-# to add drogon 
-# add_subdirectory(drogon) 
-# target_link_libraries(${PROJECT_NAME} PRIVATE drogon)
-#
-# and comment out the following lines
-find_package(Drogon CONFIG REQUIRED)
+# ==============================================================================
+# 2. ATTACH VIEWS, SOURCES, AND INCLUDES TO THE TARGET
+# ==============================================================================
+drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
+                    ${CMAKE_CURRENT_BINARY_DIR})
 
-find_package(ZLIB REQUIRED) 
-# find_package(Protobuf REQUIRED)
+target_sources(${PROJECT_NAME}
+               PRIVATE
+               ${SRC_FILES}
+               ${CTL_SRC}
+               ${FILTER_SRC}
+               ${PLUGIN_SRC}
+               ${MODEL_SRC})
 
-#Add them to the target_link_libraries here
+target_include_directories(${PROJECT_NAME}
+                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/models)
+
+# ==============================================================================
+# 3. LINK LIBRARIES TO THE TARGET
+# ==============================================================================
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     Drogon::Drogon 
     ZLIB::ZLIB
 )
 
-# ##############################################################################
-
-if (CMAKE_CXX_STANDARD LESS 17)
-    message(FATAL_ERROR "c++17 or higher is required")
-elseif (CMAKE_CXX_STANDARD LESS 20)
-    message(STATUS "use c++17")
+if (CMAKE_CXX_STANDARD LESS 20)
+    message(FATAL_ERROR "C++20 is required for coroutines!")
 else ()
-    message(STATUS "use c++20")
+    message(STATUS "Using C++20 standard with Coroutines enabled.")
 endif ()
 
-aux_source_directory(controllers CTL_SRC)
-aux_source_directory(filters FILTER_SRC)
-aux_source_directory(plugins PLUGIN_SRC)
-aux_source_directory(models MODEL_SRC)
-
-drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
-                    ${CMAKE_CURRENT_BINARY_DIR})
-# use the following line to create views with namespaces.
-# drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
-#                     ${CMAKE_CURRENT_BINARY_DIR} TRUE)
-# use the following line to create views with namespace CHANGE_ME prefixed
-# and path namespaces.
-# drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
-#                     ${CMAKE_CURRENT_BINARY_DIR} TRUE CHANGE_ME)
-
-target_include_directories(${PROJECT_NAME}
-                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-                                   ${CMAKE_CURRENT_SOURCE_DIR}/models)
-target_sources(${PROJECT_NAME}
-               PRIVATE
-               ${SRC_DIR}
-               ${CTL_SRC}
-               ${FILTER_SRC}
-               ${PLUGIN_SRC}
-               ${MODEL_SRC})
-# ##############################################################################
-# uncomment the following line for dynamically loading views 
-# set_property(TARGET ${PROJECT_NAME} PROPERTY ENABLE_EXPORTS ON)
-
-# ##############################################################################
-
-add_subdirectory(test)
+# Optional test directory
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/CMakeLists.txt")
+    add_subdirectory(test)
+endif()
