@@ -572,8 +572,8 @@ int main()
      load_all_routing_data(directory, data);
      
      // Note: Pick actual valid node IDs from your dataset for testing!
-     uint32_t source_node = 36235753; 
-     uint32_t target_node = 1776583; 
+     uint32_t source_node = 4366111; 
+     uint32_t target_node =41423097; 
      
      std::vector<uint32_t> abstract_path;
      

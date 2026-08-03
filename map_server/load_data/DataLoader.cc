@@ -23,8 +23,7 @@ const GraphDataView& DataLoader:: load_all(const std::string& dir)
 
     // Map Node Cell Mapping
     cell_map = std::make_unique<MMapFile>(dir + "/node_cell_mapping.bin");
-    // cell map is just: total_nodes(4) + array
-    view.node_cell_mapping = reinterpret_cast<const uint16_t*>(cell_map->data() + 4);
+    view.node_cell_mapping = reinterpret_cast<const uint16_t*>(cell_map->data());
 
     //Map Geometry
     geom_map = std::make_unique<MMapFile>(dir + "/geometry.bin");

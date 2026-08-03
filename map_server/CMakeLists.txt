@@ -27,6 +27,7 @@ drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
 
 target_sources(${PROJECT_NAME}
                PRIVATE
+               plugins/GraphDataPlugin.cc
                ${CTL_SRC}
                ${FILTER_SRC}
                ${PLUGIN_SRC}

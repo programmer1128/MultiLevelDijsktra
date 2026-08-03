@@ -11,6 +11,12 @@ const uint32_t INF = std::numeric_limits<uint32_t>::max();
 //core navigation engine handling the multilevel dijkstra of the partitioned edge expanded graph
 void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t target,std::vector<uint32_t>&path)
 {
+     if (source >= data.total_nodes || target >= data.total_nodes) 
+     {
+         std::cout << "[ERROR] KD-Tree returned an out-of-bounds node ID!\n";
+         std::cout << "Source ID: " << source << " | Target ID: " << target << "\n";
+         return; 
+     }
      //distance tables for the forward and the backward search
      std::vector<uint32_t> dist_f(data.total_nodes, INF);
      std::vector<uint32_t> dist_b(data.total_nodes, INF);
@@ -35,7 +41,7 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
 
      uint32_t start_cell_id= data.node_cell_mapping[source];
      uint32_t target_cell_id= data.node_cell_mapping[target];
-
+     std::cout<<"dijsktra started\n";
      while(!pq_f.empty()&&!pq_b.empty())
      {
          if(pq_f.top().first + pq_b.top().first >= shortest_path_weight)
@@ -186,7 +192,7 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
          }
      }
 
-
+     std::cout<<"dijsktra completed\n";
      if (best_meeting_node == INF) 
      {
          std::cout << "No path found between source and target.\n";

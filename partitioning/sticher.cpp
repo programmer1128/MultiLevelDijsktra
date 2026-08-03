@@ -128,6 +128,7 @@ int main()
          meta_in.read(reinterpret_cast<char*>(&ebg_nodes[i].road_type), sizeof(ebg_nodes[i].road_type));
          meta_in.read(reinterpret_cast<char*>(&ebg_nodes[i].name_id), sizeof(ebg_nodes[i].name_id));
          meta_in.read(reinterpret_cast<char*>(&ebg_nodes[i].is_one_way), sizeof(ebg_nodes[i].is_one_way));
+         meta_in.read(reinterpret_cast<char*>(&ebg_nodes[i].is_reverse_geometry), sizeof(ebg_nodes[i].is_reverse_geometry));
          meta_in.read(reinterpret_cast<char*>(&ebg_nodes[i].geometry_offset), sizeof(ebg_nodes[i].geometry_offset));
          meta_in.read(reinterpret_cast<char*>(&ebg_nodes[i].geometry_size), sizeof(ebg_nodes[i].geometry_size));
 
@@ -160,6 +161,7 @@ int main()
          meta_out.write(reinterpret_cast<const char*>(&node.road_type), sizeof(node.road_type));
          meta_out.write(reinterpret_cast<const char*>(&node.name_id), sizeof(node.name_id));
          meta_out.write(reinterpret_cast<const char*>(&node.is_one_way), sizeof(node.is_one_way));
+         meta_out.write(reinterpret_cast<const char*>(&node.is_reverse_geometry), sizeof(node.is_reverse_geometry));
          meta_out.write(reinterpret_cast<const char*>(&node.geometry_offset), sizeof(node.geometry_offset));
          meta_out.write(reinterpret_cast<const char*>(&node.geometry_size), sizeof(node.geometry_size));
      }

@@ -151,8 +151,8 @@ void loadEBGForKDTree(const std::string& geom_file, const std::string& meta_file
         uint16_t cell_id;
         uint8_t road_type;
         bool is_one_way;
+        bool is_reverse_geometry; // 1. ADD THIS VARIABLE
 
-        // Read EXACTLY as written in Phase 3.9 of your parser
         meta_in.read(reinterpret_cast<char*>(&id), sizeof(id));
         meta_in.read(reinterpret_cast<char*>(&originalId), sizeof(originalId));
         meta_in.read(reinterpret_cast<char*>(&start_osm_node_id), sizeof(start_osm_node_id));
@@ -163,10 +163,14 @@ void loadEBGForKDTree(const std::string& geom_file, const std::string& meta_file
         meta_in.read(reinterpret_cast<char*>(&road_type), sizeof(road_type));
         meta_in.read(reinterpret_cast<char*>(&name_id), sizeof(name_id));
         meta_in.read(reinterpret_cast<char*>(&is_one_way), sizeof(is_one_way));
+        
+        // 2. ADD THIS READ CALL TO ALIGN THE POINTER
+        meta_in.read(reinterpret_cast<char*>(&is_reverse_geometry), sizeof(is_reverse_geometry)); 
+        
         meta_in.read(reinterpret_cast<char*>(&geometry_offset), sizeof(geometry_offset));
         meta_in.read(reinterpret_cast<char*>(&geometry_size), sizeof(geometry_size));
 
-        // Create the KDNode using the EBG ID and the mapped starting coordinate
+        // Now geometry_offset will be perfectly accurate!
         KDNode node;
         node.node_id = id;
         node.lat = global_geom[geometry_offset].lat;
@@ -197,7 +201,7 @@ int main()
      std::cout << "START: Closest node is " << closestNode.lat << " " << closestNode.lon << " node id = " << closestNode.node_id << "\n";
      
      min = std::numeric_limits<double>::max();
-     query_kd_tree(kd_nodes, 22.5646, 88.3512, 0, kd_nodes.size()-1, true, min, closestNode);
+     query_kd_tree(kd_nodes, 21.6266, 87.5074, 0, kd_nodes.size()-1, true, min, closestNode);
      std::cout << "TARGET: Closest node is " << closestNode.lat << " " << closestNode.lon << " node id = " << closestNode.node_id << "\n";
      
      return 0;

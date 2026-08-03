@@ -64,8 +64,8 @@ typedef struct ExpandedEdge
      bool is_u_turn : 1;
 } ExpandedEdge;
 
-std::vector<ExpandedNode> expandedNodes;
-std::vector<std::vector<ExpandedEdge>> expandedGraph;
+extern std::vector<ExpandedNode> expandedNodes;
+extern std::vector<std::vector<ExpandedEdge>> expandedGraph;
 
 
 //this is used for the CSR format of graph storage to convert the graph before we feed it
@@ -78,8 +78,8 @@ typedef struct FlowEdge
       uint32_t rev_idx; // Index of the residual edge in the 'edges' array     
 }FlowEdge;
 
-std::vector<uint32_t> head;
-std::vector<FlowEdge> edges;
+extern std::vector<uint32_t> head;
+extern std::vector<FlowEdge> edges;
 
 
 typedef struct ProjectedNode
@@ -181,12 +181,12 @@ struct NodeBasedEdge
 // During Phase 1 & 2, we use an adjacency list because we need to delete 
 // nodes and append edges dynamically during compaction. 
 // We will flatten this to CSR *only* when passing it to Dinic.
-std::vector<NodeBasedNode> nbgNodes;
-std::vector<std::vector<NodeBasedEdge>> nbgGraph;
+extern std::vector<NodeBasedNode> nbgNodes;
+extern std::vector<std::vector<NodeBasedEdge>> nbgGraph;
 
-std::vector<Coordinate> global_geometry;
+extern std::vector<Coordinate> global_geometry;
 // We will need a map to quickly find the NBG Node index using the OSM Node ID
-std::unordered_map<uint64_t, uint32_t> osm_to_nbg_index;
+extern std::unordered_map<uint64_t, uint32_t> osm_to_nbg_index;
 
 
 //Structure to group a cell's boundary nodes for localized Dijkstra sweeps
@@ -204,4 +204,4 @@ struct ShortcutEdge
       //uint32_t middle_node_id; 
 };
 
-std::vector<ShortcutEdge>global_overlay_adj_bucket;
+extern std::vector<ShortcutEdge>global_overlay_adj_bucket;
