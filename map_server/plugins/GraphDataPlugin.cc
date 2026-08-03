@@ -12,7 +12,7 @@ void GraphDataPlugin::initAndStart(const Json::Value &config)
         view = loader.load_all(dir);
         
         // Build the KD-Tree array
-        kd_tree_holder.buildFromGraphView(view);
+        kd_tree_holder.initialize(view);
         
         LOG_INFO << "Plugin initialized and ready for concurrent queries!";
     } catch (const std::exception& e) {

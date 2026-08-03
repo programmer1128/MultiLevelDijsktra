@@ -13,31 +13,26 @@ find_package(Drogon CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 
 # Recursively collect all source files (.cpp, .cc, .c)
-aux_source_directory(controllers CTL_SRC)
-aux_source_directory(filters FILTER_SRC)
-aux_source_directory(plugins PLUGIN_SRC)
-aux_source_directory(models MODEL_SRC)
-aux_source_directory(load_data DATA_SRC)   # Add this
-aux_source_directory(search SEARCH_SRC)    # Add this
+file(GLOB DATA_SRC CONFIGURE_DEPENDS "load_data/*.cc" "load_data/*.cpp")
+file(GLOB SEARCH_SRC CONFIGURE_DEPENDS "search/*.cc" "search/*.cpp")
 
 # ==============================================================================
 # 1. CREATE THE EXECUTABLE TARGET FIRST
 # ==============================================================================
 add_executable(${PROJECT_NAME} main.cc)
 
-# ==============================================================================
-# 2. ATTACH VIEWS, SOURCES, AND INCLUDES TO THE TARGET
-# ==============================================================================
+
 drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
                     ${CMAKE_CURRENT_BINARY_DIR})
 
 target_sources(${PROJECT_NAME}
                PRIVATE
-               ${SRC_FILES}
                ${CTL_SRC}
                ${FILTER_SRC}
                ${PLUGIN_SRC}
-               ${MODEL_SRC})
+               ${MODEL_SRC}
+               ${DATA_SRC}
+               ${SEARCH_SRC})
 
 target_include_directories(${PROJECT_NAME}
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

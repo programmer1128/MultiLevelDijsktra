@@ -121,10 +121,10 @@ void multi_level_dijsktra(const RoutingData&data,uint32_t source,uint32_t target
                 uint32_t toNode = data.routing_edges[u].to;
                 uint32_t toNodeCell = data.node_cell_mapping[toNode];
 
-                // 1. Is this a local road inside the start or target cell?
+                //check if the road is inside the local cell or not
                 bool isLocal = (forwardNodeCell == start_cell_id || forwardNodeCell == target_cell_id);
                 
-                // 2. Is this a physical road that bridges the gap between two different cells?
+                //check if it is a boundary cell
                 bool isCrossCell = (forwardNodeCell != toNodeCell);
 
                 // Only allow the search to take this physical road if it satisfies one of the rules.
@@ -182,28 +182,27 @@ void multi_level_dijsktra(const RoutingData&data,uint32_t source,uint32_t target
                  }
              }
              //same process is repeated for the backward search for the local nodes and the shortcut edges
-             // --- CORRECTED BACKWARD BASE GRAPH EXPANSION ---
-            for(uint32_t u=data.reverse_routing_head[backwardNode]; u<data.reverse_routing_head[backwardNode+1]; u++)
-            {
-                uint32_t toNode = data.reverse_routing_edges[u].to;
-                uint32_t toNodeCell = data.node_cell_mapping[toNode];
-
-                bool isLocal = (backwardNodeCell == start_cell_id || backwardNodeCell == target_cell_id);
-                bool isCrossCell = (backwardNodeCell != toNodeCell);
-
-                if(isLocal || isCrossCell)
-                {
-                    uint32_t wt = data.reverse_routing_edges[u].weight;
-                    uint32_t currDist = wt + dist_b[backwardNode];
-
-                    if(currDist < dist_b[toNode])
+             for(uint32_t u=data.reverse_routing_head[backwardNode]; u<data.reverse_routing_head[backwardNode+1]; u++)
+             {
+                 uint32_t toNode = data.reverse_routing_edges[u].to;
+                 uint32_t toNodeCell = data.node_cell_mapping[toNode];
+ 
+                 bool isLocal = (backwardNodeCell == start_cell_id || backwardNodeCell == target_cell_id);
+                 bool isCrossCell = (backwardNodeCell != toNodeCell);
+ 
+                 if(isLocal || isCrossCell)
+                 {
+                     uint32_t wt = data.reverse_routing_edges[u].weight;
+                     uint32_t currDist = wt + dist_b[backwardNode];
+ 
+                     if(currDist < dist_b[toNode])
                     {
-                        dist_b[toNode] = currDist;
-                        parent_b[toNode] = backwardNode;
-                        pq_b.push({currDist, toNode});   
-                    }
-                }
-            }
+                         dist_b[toNode] = currDist;
+                         parent_b[toNode] = backwardNode;
+                         pq_b.push({currDist, toNode});   
+                     }
+                 }
+             }
              //overlay edges are used always for the nodes because it might be so we get a direct edge from
              //the boundary node to the target
              for(uint32_t u=data.reverse_overlay_head[backwardNode];u<data.reverse_overlay_head[backwardNode+1];u++)
@@ -245,7 +244,7 @@ void multi_level_dijsktra(const RoutingData&data,uint32_t source,uint32_t target
      // Add to the final path
      path.insert(path.end(), forward_half.begin(), forward_half.end());
 
-     // 2. Reconstruct Backward Half (Meeting Node to Target)
+     //Reconstruct Backward Half (Meeting Node to Target)
      uint32_t curr_b = parent_b[best_meeting_node];
      while (curr_b != INF) 
      {
@@ -260,72 +259,71 @@ void multi_level_dijsktra(const RoutingData&data,uint32_t source,uint32_t target
 
 
 // Micro-Dijkstra to recover the base nodes of a single shortcut inside a cell
-// Micro-Dijkstra to recover the base nodes of a single shortcut inside a cell
 std::vector<uint32_t> localized_shortcut_unpack(uint32_t start_node, uint32_t end_node, const RoutingData& data) 
 {
-    uint16_t cell_id = data.node_cell_mapping[start_node];
+     uint16_t cell_id = data.node_cell_mapping[start_node];
     
-    std::priority_queue<SearchState, std::vector<SearchState>, std::greater<SearchState>> pq;
-    std::unordered_map<uint32_t, uint32_t> dist;
-    std::unordered_map<uint32_t, uint32_t> parent;
+     std::priority_queue<SearchState, std::vector<SearchState>, std::greater<SearchState>> pq;
+     std::unordered_map<uint32_t, uint32_t> dist;
+     std::unordered_map<uint32_t, uint32_t> parent;
     
-    pq.push({0, start_node});
-    dist[start_node] = 0;
+     pq.push({0, start_node});
+     dist[start_node] = 0;
     
-    while (!pq.empty()) 
-    {
-        SearchState current = pq.top();
-        pq.pop();
+     while (!pq.empty()) 
+     {
+         SearchState current = pq.top();
+         pq.pop();
         
-        uint32_t currDist = current.first;
-        uint32_t currNode = current.second;
+         uint32_t currDist = current.first;
+         uint32_t currNode = current.second;
         
-        if (currNode == end_node) break; // Reached the end of the shortcut
-        if (currDist > dist[currNode]) continue;
+         if (currNode == end_node) break; // Reached the end of the shortcut
+         if (currDist > dist[currNode]) continue;
         
-        // Traverse only base routing edges
-        for (uint32_t u = data.routing_head[currNode]; u < data.routing_head[currNode+1]; ++u) 
-        {
-            uint32_t nextNode = data.routing_edges[u].to;
+         // Traverse only base routing edges
+         for (uint32_t u = data.routing_head[currNode]; u < data.routing_head[currNode+1]; ++u) 
+         {
+             uint32_t nextNode = data.routing_edges[u].to;
             
-            // STRICT CELL BOUNDARY PRUNING: Only explore roads inside this exact cell
-           // if (data.node_cell_mapping[nextNode] != cell_id) continue;
+             // STRICT CELL BOUNDARY PRUNING: Only explore roads inside this exact cell
+            // if (data.node_cell_mapping[nextNode] != cell_id) continue;
+             
+             uint32_t nextDist = currDist + data.routing_edges[u].weight;
             
-            uint32_t nextDist = currDist + data.routing_edges[u].weight;
-            
-            if (dist.find(nextNode) == dist.end() || nextDist < dist[nextNode]) 
-            {
-                dist[nextNode] = nextDist;
-                parent[nextNode] = currNode;
-                pq.push({nextDist, nextNode});
-            }
-        }
-    }
+             if (dist.find(nextNode) == dist.end() || nextDist < dist[nextNode]) 
+             {
+                 dist[nextNode] = nextDist;
+                 parent[nextNode] = currNode;
+                 pq.push({nextDist, nextNode});
+             }
+         }
+     }
     
-    // Trace back the local path safely
-    std::vector<uint32_t> sub_path;
-    uint32_t curr = end_node;
+     // Trace back the local path safely
+     std::vector<uint32_t> sub_path;
+     uint32_t curr = end_node;
     
-    while (curr != start_node) 
-    {
-        // SAFETY CHECK: Prevent the unordered_map infinite loop trap
-        auto it = parent.find(curr);
-        if (it == parent.end()) 
-        {
-            std::cout << "[WARNING] Unpack missing inner roads for shortcut " << start_node << " -> " << end_node << ". Falling back to straight line.\n";
-            sub_path.clear();
-            sub_path.push_back(end_node);
-            break;
-        }
+     while (curr != start_node) 
+     {
+         // SAFETY CHECK: Prevent the unordered_map infinite loop trap
+         auto it = parent.find(curr);
+         if (it == parent.end()) 
+         {
+             std::cout << "[WARNING] Unpack missing inner roads for shortcut " << start_node << " -> " << end_node << ". Falling back to straight line.\n";
+             sub_path.clear();
+             sub_path.push_back(end_node);
+             break;
+         }
         
-        sub_path.push_back(curr);
-        curr = it->second; // Safely assign the parent
-    }
+         sub_path.push_back(curr);
+         curr = it->second; // Safely assign the parent
+     }
     
-    sub_path.push_back(start_node);
-    std::reverse(sub_path.begin(), sub_path.end());
+     sub_path.push_back(start_node);
+     std::reverse(sub_path.begin(), sub_path.end());
     
-    return sub_path;
+     return sub_path;
 }
 
 // Converts a mixed abstract path into a purely physical base edge path

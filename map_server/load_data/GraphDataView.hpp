@@ -6,10 +6,10 @@
 #pragma pack(push, 1)
 struct PackedMetadata 
 {
-     uint32_t id;
-     uint64_t originalId;
-     uint64_t start_osm_node_id;
-     uint64_t end_osm_node_id;
+      uint32_t id;
+      uint64_t originalId;
+      uint64_t start_osm_node_id;
+      uint64_t end_osm_node_id;
      uint32_t wt;
      uint32_t distance_meters;
      uint16_t cell_id;
