@@ -4,6 +4,7 @@
 #include "search/kd_tree.h"
 // Include the headers where GraphDataView and KDNode are defined
 #include "GraphDataView.hpp" 
+#include <drogon/drogon.h>
 // #include "kd_tree.h"
 
 class KDTreeHolder 

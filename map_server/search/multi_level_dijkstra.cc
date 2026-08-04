@@ -2,6 +2,7 @@
 #include <json/json.h>
 #include "plugins/GraphDataPlugin.hpp"
 #include "multi_level_dijkstra.h"
+#include<chrono>
 
 //alias for the std pair to be used in the priority queue
 using SearchState = std::pair<uint32_t,uint32_t>;
@@ -13,8 +14,8 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
 {
      if (source >= data.total_nodes || target >= data.total_nodes) 
      {
-         std::cout << "[ERROR] KD-Tree returned an out-of-bounds node ID!\n";
-         std::cout << "Source ID: " << source << " | Target ID: " << target << "\n";
+         LOG_ERROR<< "[ERROR] KD-Tree returned an out-of-bounds node ID!\n";
+         LOG_ERROR<< "Source ID: " << source << " | Target ID: " << target<<"\n";
          return; 
      }
      //distance tables for the forward and the backward search
@@ -39,9 +40,9 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
      dist_b[target] = 0;
      pq_b.push({0, target});
 
-     uint32_t start_cell_id= data.node_cell_mapping[source];
-     uint32_t target_cell_id= data.node_cell_mapping[target];
-     std::cout<<"dijsktra started\n";
+     uint32_t start_cell_id= data.node_metadata[source].cell_id;
+     uint32_t target_cell_id= data.node_metadata[target].cell_id;
+     //std::cout<<"dijsktra started\n";
      while(!pq_f.empty()&&!pq_b.empty())
      {
          if(pq_f.top().first + pq_b.top().first >= shortest_path_weight)
@@ -66,7 +67,7 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
 
              uint32_t forwardDist = forward.first;
              uint32_t forwardNode = forward.second;
-             uint32_t forwardNodeCell = data.node_cell_mapping[forwardNode];
+             uint32_t forwardNodeCell = data.node_metadata[forwardNode].cell_id;
 
              // Stale entry check (Early out)
              if(forwardDist > dist_f[forwardNode]) 
@@ -90,7 +91,7 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
              for(uint32_t u=data.routing_head[forwardNode]; u<data.routing_head[forwardNode+1]; u++)
             {
                 uint32_t toNode = data.routing_edges[u].to;
-                uint32_t toNodeCell = data.node_cell_mapping[toNode];
+                uint32_t toNodeCell = data.node_metadata[toNode].cell_id;
 
                 //check if the road is inside the local cell or not
                 bool isLocal = (forwardNodeCell == start_cell_id || forwardNodeCell == target_cell_id);
@@ -136,7 +137,7 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
              uint32_t backwardDist=backward.first;
 
              uint32_t backwardNode=backward.second;
-             uint32_t backwardNodeCell=data.node_cell_mapping[backwardNode];
+             uint32_t backwardNodeCell=data.node_metadata[backwardNode].cell_id;
 
              if(backwardDist > dist_b[backwardNode]) 
              {
@@ -156,7 +157,7 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
              for(uint32_t u=data.reverse_routing_head[backwardNode]; u<data.reverse_routing_head[backwardNode+1]; u++)
              {
                  uint32_t toNode = data.reverse_routing_edges[u].to;
-                 uint32_t toNodeCell = data.node_cell_mapping[toNode];
+                 uint32_t toNodeCell = data.node_metadata[toNode].cell_id;
  
                  bool isLocal = (backwardNodeCell == start_cell_id || backwardNodeCell == target_cell_id);
                  bool isCrossCell = (backwardNodeCell != toNodeCell);
@@ -192,10 +193,10 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
          }
      }
 
-     std::cout<<"dijsktra completed\n";
+     //std::cout<<"dijsktra completed\n";
      if (best_meeting_node == INF) 
      {
-         std::cout << "No path found between source and target.\n";
+         LOG_INFO<< "No path found between source and target.\n";
          return;
      }
 
@@ -223,8 +224,8 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
          curr_b = parent_b[curr_b];
      }
 
-     std::cout << "Shortest Path Found! Weight: " << shortest_path_weight << " seconds.\n";
-     std::cout << "Total Nodes in Path: " << path.size() << "\n";
+     //std::cout << "Shortest Path Found! Weight: " << shortest_path_weight << " seconds.\n";
+     //std::cout << "Total Nodes in Path: " << path.size() << "\n";
 }
 
 
@@ -232,7 +233,7 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
 // Micro-Dijkstra to recover the base nodes of a single shortcut inside a cell
 std::vector<uint32_t> localized_shortcut_unpack(uint32_t start_node, uint32_t end_node, const GraphDataView& data) 
 {
-     uint16_t cell_id = data.node_cell_mapping[start_node];
+     uint16_t cell_id = data.node_metadata[start_node].cell_id;
     
      std::priority_queue<SearchState, std::vector<SearchState>, std::greater<SearchState>> pq;
      std::unordered_map<uint32_t, uint32_t> dist;
@@ -405,9 +406,21 @@ Json::Value getPathJson(uint32_t startNodeId,uint32_t destNodeId,const GraphData
 {
      std::vector<uint32_t> abstract_path;  
 
+     auto start_math = std::chrono::high_resolution_clock::now();
      multi_level_dijsktra(data,startNodeId,destNodeId,abstract_path);
-     
-     return build_geojson_response(unpack_abstract_path(abstract_path,data),data) ;//unpack_abstract_path(abstract_path,data)
+     auto end_math = std::chrono::high_resolution_clock::now();
+
+     auto start_json = std::chrono::high_resolution_clock::now();
+     Json::Value json=build_geojson_response(unpack_abstract_path(abstract_path,data),data) ;
+     auto end_json = std::chrono::high_resolution_clock::now();
+
+     auto math_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_math - start_math).count();
+     auto json_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_json - start_json).count();
+
+     std::cout<< "Route: " << startNodeId << " -> " << destNodeId<<"\n";
+     std::cout<< "Pathfinding + Unpack Time: " << math_time << " ms\n";
+     std::cout<< "JSON Serialization Time: " << json_time << " ms\n";
+     return json;//unpack_abstract_path(abstract_path,data)
 }
 /*
 //load all the data from the pre processed files
