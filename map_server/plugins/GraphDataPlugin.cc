@@ -1,9 +1,27 @@
 #include "GraphDataPlugin.hpp"
 #include <drogon/drogon.h>
+#include <cstdlib> // Included for std::getenv
 
 void GraphDataPlugin::initAndStart(const Json::Value &config) 
 {
-     std::string dir = config.get("graph_dir", "/home/aritra/MultiLevelDijsktra/parsing").asString();
+     std::string dir;
+
+     // 1. Priority: Check for Environment Variable
+     if(const char* env_path = std::getenv("MAP_DATA_DIR")) 
+     {
+         dir = env_path;
+     } 
+     // 2. Second Priority: config.json (Only if the path physically exists on disk)
+     else if (config.isMember("graph_dir") && 
+              std::filesystem::exists(config["graph_dir"].asString())) 
+     {
+         dir = config["graph_dir"].asString();
+     } 
+     // 3. Fallback Priority: Your local Fedora folder
+     else 
+     {
+         dir = "/home/aritra/MultiLevelDijsktra/parsing";
+     }
     
      LOG_INFO << "Initializing MMap Graph Data from: " << dir;
     

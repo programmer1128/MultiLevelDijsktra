@@ -12,3 +12,17 @@ for the overlay graph file
 g++ -O3 -fopenmp OverlayGraphConstructor.cpp -o customizer
 
 ln -s ../config.json config.json
+
+
+//for the data ingestion
+# Install the C++ JSON parser and Osmium dependencies
+sudo dnf install -y nlohmann-json-devel zlib-devel expat-devel bzip2-devel
+
+# Compile the extraction engine
+g++ -O3 -std=c++17 extract_pois.cpp -o extract_pois -lz -lexpat -lbz2 -lpthread
+
+# Run it against your map data
+./extract_pois
+
+//testing curl command college routec
+curl -o local_route.geojson "http://localhost:8080/api/route?start_lat=22.517200&start_lon=88.418795&dest_lat=22.480839&dest_lon=88.305162"

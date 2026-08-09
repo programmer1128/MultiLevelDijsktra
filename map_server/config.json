@@ -10,7 +10,7 @@
             "name": "GraphDataPlugin",
             "dependencies": [],
             "config": {
-                "graph_dir": "/home/aritra/MultiLevelDijsktra/parsing"
+                "graph_dir": "/app/parsing"
             }
         }
     ]

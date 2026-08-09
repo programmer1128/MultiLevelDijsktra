@@ -340,23 +340,50 @@ std::vector<uint32_t> unpack_abstract_path(const std::vector<uint32_t>& abstract
     return detailed_path;
 }
 
+std::string formatDuration(uint32_t seconds) 
+{
+     uint32_t mins = seconds / 60;
+     if (mins < 60) 
+     {
+         return std::to_string(mins) + " mins";
+     }
+     uint32_t hours = mins / 60;
+     uint32_t rem_mins = mins % 60;
+     return std::to_string(hours) + " hr " + std::to_string(rem_mins) + " mins";
+}
+
+std::string formatDistance(uint32_t meters) 
+{
+     if (meters < 1000) 
+     {
+         return std::to_string(meters) + " m";
+     }
+     double km = meters / 1000.0;
+     char buf[16];
+     snprintf(buf, sizeof(buf), "%.1f km", km);
+     return std::string(buf);
+}
+
 Json::Value build_geojson_response(const std::vector<uint32_t>& detailed_path, 
                                    const GraphDataView& graph_view) 
 {
-     //Initialize the Root GeoJSON Object
+     // 1. Initialize the Root GeoJSON Object
      Json::Value geojson;
      geojson["type"] = "FeatureCollection";
     
-     //Initialize the single Feature
+     // 2. Initialize the single Feature
      Json::Value feature;
      feature["type"] = "Feature";
-     feature["properties"]["name"] = "Route";
     
-     //Initialize the Geometry
+     // 3. Initialize the Geometry
      Json::Value geometry;
      geometry["type"] = "LineString";
     
-     //Build the Coordinate Array
+     // 4. Trackers for total trip metrics
+     uint32_t total_time_seconds = 0;
+     uint32_t total_distance_meters = 0;
+
+     // 5. Build the Coordinate Array and Accumulate Metrics
      Json::Value coordinates(Json::arrayValue);
 
      for (size_t i = 0; i < detailed_path.size(); ++i) 
@@ -369,14 +396,16 @@ Json::Value build_geojson_response(const std::vector<uint32_t>& detailed_path,
              continue;
          }
 
+         // Accumulate metrics from node_metadata
+         total_time_seconds += graph_view.node_metadata[ebg_node_id].wt;
+         total_distance_meters += graph_view.node_metadata[ebg_node_id].distance_meters;
+
          bool reverse_order = graph_view.node_metadata[ebg_node_id].is_reverse_geometry;
          uint32_t offset = graph_view.node_metadata[ebg_node_id].geometry_offset;
          uint32_t size = graph_view.node_metadata[ebg_node_id].geometry_size;
 
          for (uint32_t j = 0; j < size; ++j) 
          {
-             // Note: global_coords size check is omitted here because the parser 
-             // guarantees valid offsets, but you can add it if needed.
              uint32_t index = reverse_order ? (offset + size - 1 - j) : (offset + j);
             
              // Create a [lon, lat] pair
@@ -389,7 +418,17 @@ Json::Value build_geojson_response(const std::vector<uint32_t>& detailed_path,
          }
      }
     
-     //Assemble the JSON Hierarchy
+     // 6. Populate Feature Properties (Timing & Distance metadata)
+     Json::Value properties;
+     properties["name"] = "Route";
+     properties["duration_seconds"] = total_time_seconds;
+     properties["duration_string"] = formatDuration(total_time_seconds);
+     properties["distance_meters"] = total_distance_meters;
+     properties["distance_string"] = formatDistance(total_distance_meters);
+
+     feature["properties"] = properties;
+
+     // 7. Assemble the JSON Hierarchy
      geometry["coordinates"] = coordinates;
      feature["geometry"] = geometry;
     
@@ -406,20 +445,20 @@ Json::Value getPathJson(uint32_t startNodeId,uint32_t destNodeId,const GraphData
 {
      std::vector<uint32_t> abstract_path;  
 
-     auto start_math = std::chrono::high_resolution_clock::now();
+     //auto start_math = std::chrono::high_resolution_clock::now();
      multi_level_dijsktra(data,startNodeId,destNodeId,abstract_path);
-     auto end_math = std::chrono::high_resolution_clock::now();
+     //auto end_math = std::chrono::high_resolution_clock::now();
 
-     auto start_json = std::chrono::high_resolution_clock::now();
+     //auto start_json = std::chrono::high_resolution_clock::now();
      Json::Value json=build_geojson_response(unpack_abstract_path(abstract_path,data),data) ;
-     auto end_json = std::chrono::high_resolution_clock::now();
+     //auto end_json = std::chrono::high_resolution_clock::now();
 
-     auto math_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_math - start_math).count();
-     auto json_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_json - start_json).count();
+     //auto math_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_math - start_math).count();
+     //auto json_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_json - start_json).count();
 
-     std::cout<< "Route: " << startNodeId << " -> " << destNodeId<<"\n";
-     std::cout<< "Pathfinding + Unpack Time: " << math_time << " ms\n";
-     std::cout<< "JSON Serialization Time: " << json_time << " ms\n";
+     //std::cout<< "Route: " << startNodeId << " -> " << destNodeId<<"\n";
+     //std::cout<< "Pathfinding + Unpack Time: " << math_time << " ms\n";
+     //std::cout<< "JSON Serialization Time: " << json_time << " ms\n";
      return json;//unpack_abstract_path(abstract_path,data)
 }
 /*

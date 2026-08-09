@@ -81,7 +81,7 @@ uint32_t findClosestNode(const std::vector<KDNode>&kd_nodes,double lat,double lo
      double min = std::numeric_limits<double>::max();
      query_kd_tree(kd_nodes,lat, lon, 0, kd_nodes.size()-1, true, min, closestNode);
 
-     std::cout<<"id = "<<closestNode.node_id<<"\n";
+     //std::cout<<"id = "<<closestNode.node_id<<"\n";
      return closestNode.node_id;
 }
 

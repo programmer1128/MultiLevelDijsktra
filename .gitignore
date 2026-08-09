@@ -8,6 +8,7 @@
 # Ignore massive visualization outputs and databases
 *.geojson
 *.gpkg
+*.csv
 
 # Ignore compiled C++ executables (add any specific binary names here)
 visualize_cuts
