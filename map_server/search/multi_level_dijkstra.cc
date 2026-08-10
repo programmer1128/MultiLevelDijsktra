@@ -258,8 +258,7 @@ std::vector<uint32_t> localized_shortcut_unpack(uint32_t start_node, uint32_t en
          {
              uint32_t nextNode = data.routing_edges[u].to;
             
-             // STRICT CELL BOUNDARY PRUNING: Only explore roads inside this exact cell
-            // if (data.node_cell_mapping[nextNode] != cell_id) continue;
+             // if (data.node_cell_mapping[nextNode] != cell_id) continue;
              
              uint32_t nextDist = currDist + data.routing_edges[u].weight;
             
