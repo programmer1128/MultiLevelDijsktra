@@ -310,7 +310,7 @@ std::vector<uint32_t> unpack_abstract_path(const std::vector<uint32_t>& abstract
         uint32_t u = abstract_path[i];
         uint32_t v = abstract_path[i+1];
         
-        // 1. Check if (u -> v) is already a direct base edge
+        //check if (u -> v) is already a direct base edge
         bool is_base_edge = false;
         for (uint32_t e = data.routing_head[u]; e < data.routing_head[u+1]; ++e) 
         {
@@ -366,23 +366,23 @@ std::string formatDistance(uint32_t meters)
 Json::Value build_geojson_response(const std::vector<uint32_t>& detailed_path, 
                                    const GraphDataView& graph_view) 
 {
-     // 1. Initialize the Root GeoJSON Object
+     //Initialize the Root GeoJSON Object
      Json::Value geojson;
      geojson["type"] = "FeatureCollection";
     
-     // 2. Initialize the single Feature
+     //Initialize the single Feature
      Json::Value feature;
      feature["type"] = "Feature";
     
-     // 3. Initialize the Geometry
+     //Initialize the Geometry
      Json::Value geometry;
      geometry["type"] = "LineString";
     
-     // 4. Trackers for total trip metrics
+     //Trackers for total trip metrics
      uint32_t total_time_seconds = 0;
      uint32_t total_distance_meters = 0;
 
-     // 5. Build the Coordinate Array and Accumulate Metrics
+     //Build the Coordinate Array and Accumulate Metrics
      Json::Value coordinates(Json::arrayValue);
 
      for (size_t i = 0; i < detailed_path.size(); ++i) 
@@ -417,7 +417,7 @@ Json::Value build_geojson_response(const std::vector<uint32_t>& detailed_path,
          }
      }
     
-     // 6. Populate Feature Properties (Timing & Distance metadata)
+     // Populate Feature Properties (Timing & Distance metadata)
      Json::Value properties;
      properties["name"] = "Route";
      properties["duration_seconds"] = total_time_seconds;

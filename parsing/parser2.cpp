@@ -534,7 +534,7 @@ int main()
          meta_out.write(reinterpret_cast<const char*>(&node.wt), sizeof(node.wt));
          meta_out.write(reinterpret_cast<const char*>(&node.distance_meters), sizeof(node.distance_meters));
          meta_out.write(reinterpret_cast<const char*>(&node.cell_id), sizeof(node.cell_id));
-         
+        
          meta_out.write(reinterpret_cast<const char*>(&node.road_type), sizeof(node.road_type));
          meta_out.write(reinterpret_cast<const char*>(&node.name_id), sizeof(node.name_id));
          meta_out.write(reinterpret_cast<const char*>(&node.is_one_way), sizeof(node.is_one_way));
