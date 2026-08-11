@@ -18,56 +18,22 @@ uint32_t calculate_distance(double lat1, double lon1, double lat2, double lon2)
 void KDTreeHolder::initialize(const GraphDataView& view) 
 {
      LOG_INFO<< "Constructing KD-Tree array in RAM\n";
-     kd_nodes_array.reserve(view.total_nodes * 2); 
+     kd_nodes_array.resize(view.total_nodes);
 
      for (uint32_t i = 0; i < view.total_nodes; ++i) 
      {
          const auto& meta = view.node_metadata[i];
          uint32_t offset = meta.geometry_offset;
-         uint32_t size = meta.geometry_size;
-
-         //insert the starting coordinate of the road
-         KDNode first_node;
-         first_node.node_id = meta.id;
-         first_node.lat = view.coordinates[offset].lat;
-         first_node.lon = view.coordinates[offset].lon;
-         kd_nodes_array.push_back(first_node);
-
-         double last_lat = first_node.lat;
-         double last_lon = first_node.lon;
-
-         //Iterate through the remaining coordinates of this specific road
-         for (uint32_t j = 1; j < size; ++j) 
-         {
-             double current_lat = view.coordinates[offset + j].lat;
-             double current_lon = view.coordinates[offset + j].lon;
-
-             // Calculate Haversine distance from the last inserted point
-             uint32_t dist = calculate_distance(last_lat, last_lon, current_lat, current_lon);
-
-             //if the dist between the 2 nodes is greater than 30m then only we insert
-             if (dist >= 30 || j == size - 1) 
-             {
-                 KDNode node;
-                 node.node_id = meta.id; // Multiple KD nodes now point to the same EBG edge
-                 node.lat = current_lat;
-                 node.lon = current_lon;
-                 kd_nodes_array.push_back(node);
-
-                 // Move the anchor forward
-                 last_lat = current_lat;
-                 last_lon = current_lon;
-             }
-         }
+ 
+         kd_nodes_array[i].node_id = meta.id;
+         kd_nodes_array[i].lat = view.coordinates[offset].lat;
+         kd_nodes_array[i].lon = view.coordinates[offset].lon;
         
          if (i > 0 && i % 1000000 == 0) 
          {
-             LOG_INFO << "Processed " << i << " edges into " << kd_nodes_array.size() << " KD-Tree nodes\n";
+             LOG_INFO<< "Loaded " << i << " nodes into RAM\n";
          }
      }
-
-     // Optional: Free unused reserved RAM capacity after the loop finishes
-     kd_nodes_array.shrink_to_fit();
 
      if (!kd_nodes_array.empty()) 
      {
