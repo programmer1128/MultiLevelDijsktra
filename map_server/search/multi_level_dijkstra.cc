@@ -89,30 +89,30 @@ void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t tar
 
              //apply the local search if the popped node is in source or target cell
              for(uint32_t u=data.routing_head[forwardNode]; u<data.routing_head[forwardNode+1]; u++)
-            {
-                uint32_t toNode = data.routing_edges[u].to;
-                uint32_t toNodeCell = data.node_metadata[toNode].cell_id;
+             {
+                 uint32_t toNode = data.routing_edges[u].to;
+                 uint32_t toNodeCell = data.node_metadata[toNode].cell_id;
 
-                //check if the road is inside the local cell or not
-                bool isLocal = (forwardNodeCell == start_cell_id || forwardNodeCell == target_cell_id);
+                 //check if the road is inside the local cell or not
+                 bool isLocal = (forwardNodeCell == start_cell_id || forwardNodeCell == target_cell_id);
                 
-                //check if it is a boundary cell
-                bool isCrossCell = (forwardNodeCell != toNodeCell);
+                 //check if it is a boundary cell
+                 bool isCrossCell = (forwardNodeCell != toNodeCell);
 
-                // Only allow the search to take this physical road if it satisfies one of the rules.
-                if(isLocal || isCrossCell)
-                {
-                    uint32_t wt = data.routing_edges[u].weight;
-                    uint32_t currDist = wt + dist_f[forwardNode];
+                 // Only allow the search to take this physical road if it satisfies one of the rules.
+                 if(isLocal || isCrossCell)
+                 {
+                     uint32_t wt = data.routing_edges[u].weight;
+                     uint32_t currDist = wt + dist_f[forwardNode];
 
-                    if(currDist < dist_f[toNode])
-                    {
-                        dist_f[toNode] = currDist;
-                        parent_f[toNode] = forwardNode;
-                        pq_f.push({currDist, toNode});   
-                    }
-                }
-            }
+                     if(currDist < dist_f[toNode])
+                     {
+                         dist_f[toNode] = currDist;
+                         parent_f[toNode] = forwardNode;
+                         pq_f.push({currDist, toNode});   
+                     }
+                 }
+             }
 
              //overlay edges are used always for the nodes because it might be so we get a direct edge from
              //the boundary node to the target
