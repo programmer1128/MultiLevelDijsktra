@@ -75,6 +75,50 @@ void query_kd_tree(const std::vector<KDNode>&kd_nodes,double lat,double lon,int 
      
 }
 
+
+//new query function. the graph used for this engine is a edge expanded graph. that means we have 
+//2 nodes for a bi directional road. first is for a way north to south second for south to nort.
+//now here the problem is if the kd tree snaps south node isntead of north user might have to take
+//a u turn. so we need a better radius search approach
+void query_kd_tree_radius(const std::vector<KDNode>& kd_nodes, double lat, double lon, int l, int h,
+     bool alongXAxis, double radius_squared, std::vector<KDNode>& candidates)
+{
+     if(l > h) return;
+     
+     int mid = l + (h - l) / 2;
+     KDNode currNode = kd_nodes[mid];
+
+     double dist = (std::pow(lat - currNode.lat, 2) + std::pow(lon - currNode.lon, 2));
+
+     // If the node falls within our fixed circle, add it to the candidate pool
+     if(dist <= radius_squared)
+     {
+         candidates.push_back(currNode);
+     }
+     
+     double orthogonal_dist = alongXAxis ? lat - currNode.lat : lon - currNode.lon;
+
+     int first_half_l = l, first_half_h = mid - 1;
+     int second_half_l = mid + 1, second_half_h = h;
+
+     if (orthogonal_dist > 0) 
+     {
+         std::swap(first_half_l, second_half_l);
+         std::swap(first_half_h, second_half_h);
+     }
+
+     //always search the primary side
+     query_kd_tree_radius(kd_nodes, lat, lon, first_half_l, first_half_h, !alongXAxis, radius_squared, candidates);
+     
+     // Search the other side only if our fixed search radius crosses the splitting plane
+     if ((orthogonal_dist * orthogonal_dist) <= radius_squared) 
+     {
+         query_kd_tree_radius(kd_nodes, lat, lon, second_half_l, second_half_h, !alongXAxis, radius_squared, candidates);
+     }
+}
+
+
+
 uint32_t findClosestNode(const std::vector<KDNode>&kd_nodes,double lat,double lon)
 {
      KDNode closestNode;
@@ -83,6 +127,55 @@ uint32_t findClosestNode(const std::vector<KDNode>&kd_nodes,double lat,double lo
 
      //std::cout<<"id = "<<closestNode.node_id<<"\n";
      return closestNode.node_id;
+}
+
+
+
+uint32_t findBestNodeWithHeading(const std::vector<KDNode>& kd_nodes, double lat, double lon, double user_heading)
+{
+     std::vector<KDNode> candidates;
+     
+     // Approx conversion: 1 degree latitude is ~111km. 
+     // 20 meters is roughly 0.00018 degrees. 
+     // We need radius squared for the distance math: (0.00018)^2 = 3.24e-8
+     double max_radius_deg = 0.00018;
+     double radius_squared = max_radius_deg * max_radius_deg; 
+     
+     query_kd_tree_radius(kd_nodes, lat, lon, 0, kd_nodes.size() - 1, true, radius_squared, candidates);
+
+     // Safety net: If no roads are within 20 meters, revert to your original absolute nearest neighbor
+     if (candidates.empty()) 
+     {
+         return findClosestNode(kd_nodes, lat, lon);
+     }
+
+     uint32_t best_node_id = candidates[0].node_id;
+     double min_cost = std::numeric_limits<double>::max();
+
+     for (const auto& node : candidates) 
+     {
+         //Pull the start and end coordinates of this specific node_id from your EBG geometry
+         // to calculate the physical bearing of the road segment.
+         double road_bearing = 0.0; // Placeholder until geometry lookup is connected
+         
+         //calculate Angular Difference (0 to 180 degrees)
+         double angular_diff = 180.0 - std::abs(std::abs(user_heading - road_bearing) - 180.0);
+         
+         //calculate physical distance
+         double dist = std::sqrt(std::pow(lat - node.lat, 2) + std::pow(lon - node.lon, 2));
+
+         // Normalized Cost Function (Alpha = 0.5, Beta = 0.5)
+         // We divide distance by max_radius and angular_diff by 180 to scale both between 0.0 and 1.0
+         double cost = (0.5 * (dist / max_radius_deg)) + (0.5 * (angular_diff / 180.0));
+
+         if (cost < min_cost) 
+         {
+             min_cost = cost;
+             best_node_id = node.node_id;
+         }
+     }
+     
+     return best_node_id;
 }
 
 /*
@@ -123,7 +216,7 @@ void loadGeometryForKDTree(const std::string& filepath, std::vector<KDNode>& kd_
 
 void loadEBGForKDTree(const std::string& geom_file, const std::string& meta_file, std::vector<KDNode>& kd_nodes) 
 {
-    // 1. Load the flat 139M NBG coordinate array
+    //Load the flat 139M NBG coordinate array
     std::ifstream geom_in(geom_file, std::ios::binary);
     if (!geom_in) {
         std::cerr << "Failed to open " << geom_file << "\n";
@@ -135,7 +228,7 @@ void loadEBGForKDTree(const std::string& geom_file, const std::string& meta_file
     geom_in.read(reinterpret_cast<char*>(global_geom.data()), total_coords * sizeof(Coordinate));
     geom_in.close();
 
-    // 2. Load the EBG Metadata and construct the mapped KD-Tree array
+    //load the EBG Metadata and construct the mapped KD-Tree array
     std::ifstream meta_in(meta_file, std::ios::binary);
     if (!meta_in) {
         std::cerr << "Failed to open " << meta_file << "\n";
@@ -154,8 +247,6 @@ void loadEBGForKDTree(const std::string& geom_file, const std::string& meta_file
         uint16_t cell_id;
         uint8_t road_type;
         bool is_one_way;
-
-        // Read EXACTLY as written in Phase 3.9 of your parser
         meta_in.read(reinterpret_cast<char*>(&id), sizeof(id));
         meta_in.read(reinterpret_cast<char*>(&originalId), sizeof(originalId));
         meta_in.read(reinterpret_cast<char*>(&start_osm_node_id), sizeof(start_osm_node_id));
@@ -188,7 +279,6 @@ int main()
      std::string geom_file = "/home/aritra/MultiLevelDijsktra/parsing/geometry.bin";
      std::string meta_file = "/home/aritra/MultiLevelDijsktra/parsing/metadata.bin";
      
-     // USE THE NEW FUSION LOADER
      loadEBGForKDTree(geom_file, meta_file, kd_nodes);
      
      build_KD_Tree(kd_nodes, 0, kd_nodes.size()-1, true);

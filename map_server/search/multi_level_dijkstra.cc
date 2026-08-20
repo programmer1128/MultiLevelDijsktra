@@ -281,7 +281,7 @@ std::vector<uint32_t> localized_shortcut_unpack(uint32_t start_node, uint32_t en
          auto it = parent.find(curr);
          if (it == parent.end()) 
          {
-             std::cout << "[WARNING] Unpack missing inner roads for shortcut " << start_node << " -> " << end_node << ". Falling back to straight line.\n";
+             //std::cout << "[WARNING] Unpack missing inner roads for shortcut " << start_node << " -> " << end_node << ". Falling back to straight line.\n";
              sub_path.clear();
              sub_path.push_back(end_node);
              break;

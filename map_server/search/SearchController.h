@@ -12,7 +12,7 @@ class SearchController : public HttpController<SearchController>
     
      METHOD_LIST_BEGIN
      
-     ADD_METHOD_TO(SearchController::getRoute, "/api/route?start_lat={1}&start_lon={2}&dest_lat={3}&dest_lon={4}&compass={%}", drogon::Get);
+     ADD_METHOD_TO(SearchController::getRoute, "/api/route?start_lat={1}&start_lon={2}&dest_lat={3}&dest_lon={4}&compass={5}", drogon::Get);
 
      METHOD_LIST_END
 

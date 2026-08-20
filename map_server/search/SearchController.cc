@@ -13,7 +13,7 @@ drogon::Task<drogon::HttpResponsePtr> SearchController::getRoute(drogon::HttpReq
              << ") to (" << dest_lat << ", " << dest_lon << ")";
 
          //call to service 
-         Json::Value geoJson = normal_routing(start_lat, start_lon, dest_lat, dest_lon);
+         Json::Value geoJson = normal_routing(start_lat, start_lon, dest_lat, dest_lon,compass);
 
           auto resp = drogon::HttpResponse::newHttpJsonResponse(geoJson);
 
