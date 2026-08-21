@@ -1,5 +1,5 @@
 #include<bits/stdc++.h>
-#include <json/json.h>
+#include "math/functions.h"
 #include "plugins/GraphDataPlugin.hpp"
 #include "multi_level_dijkstra.h"
 #include<chrono>
@@ -8,6 +8,8 @@
 using SearchState = std::pair<uint32_t,uint32_t>;
 
 const uint32_t INF = std::numeric_limits<uint32_t>::max();
+
+
 
 //core navigation engine handling the multilevel dijkstra of the partitioned edge expanded graph
 void multi_level_dijsktra(const GraphDataView& data,uint32_t source,uint32_t target,std::vector<uint32_t>&path)
@@ -363,103 +365,110 @@ std::string formatDistance(uint32_t meters)
      return std::string(buf);
 }
 
-Json::Value build_geojson_response(const std::vector<uint32_t>& detailed_path, 
-                                   const GraphDataView& graph_view) 
+//modular payload method shifted from previosu Json::Value method to enable swift integrationg of
+//protobuff later
+NavigationPayload extract_navigation_payload(const std::vector<uint32_t>& detailed_path, 
+     const GraphDataView& graph_view) 
 {
-     //Initialize the Root GeoJSON Object
-     Json::Value geojson;
-     geojson["type"] = "FeatureCollection";
-    
-     //Initialize the single Feature
-     Json::Value feature;
-     feature["type"] = "Feature";
-    
-     //Initialize the Geometry
-     Json::Value geometry;
-     geometry["type"] = "LineString";
-    
-     //Trackers for total trip metrics
-     uint32_t total_time_seconds = 0;
-     uint32_t total_distance_meters = 0;
-
-     //Build the Coordinate Array and Accumulate Metrics
-     Json::Value coordinates(Json::arrayValue);
-
-     for (size_t i = 0; i < detailed_path.size(); ++i) 
+     NavigationPayload payload;
+     if (detailed_path.empty()) 
      {
-         uint32_t ebg_node_id = detailed_path[i];
-        
-         // Safety check against mapped memory size
-         if (ebg_node_id >= graph_view.total_nodes) 
+         return payload;
+     }
+
+     //pre calculating the mem req and reserving space for the vector
+     size_t total_geometry_points = 0;
+     size_t total_corridor_edges = 0;
+
+     for (uint32_t u : detailed_path) 
+     {
+         if (u >= graph_view.total_nodes) 
+         {
+             continue;
+         }
+         total_geometry_points += graph_view.node_metadata[u].geometry_size;
+         total_corridor_edges += (graph_view.routing_head[u+1] - graph_view.routing_head[u]);
+     }
+
+     //using normal .push_back for vectors is highly expensive because as the vector grows it has
+     //to constantly resize and copy new elements. instead if we reserve memory before hand and use
+     //emplace back which creates the object directly in the reserved vector space memory it is a great
+     //performance increase
+     payload.route_path_ids.reserve(detailed_path.size());
+     payload.route_geometry.reserve(total_geometry_points);
+     payload.corridor_edges.reserve(total_corridor_edges);
+    
+     std::unordered_set<uint32_t> unique_corridor_nodes;
+     // A route node usually has 2-4 cross streets. Reserving this prevents hash map rehashing.
+     unique_corridor_nodes.reserve(detailed_path.size() * 3); 
+
+     for (uint32_t u : detailed_path) 
+     {
+         if (u >= graph_view.total_nodes) 
          {
              continue;
          }
 
-         // Accumulate metrics from node_metadata
-         total_time_seconds += graph_view.node_metadata[ebg_node_id].wt;
-         total_distance_meters += graph_view.node_metadata[ebg_node_id].distance_meters;
+         // O(1) Insertion now because memory is pre-allocated
+         payload.route_path_ids.push_back(u);
+         unique_corridor_nodes.insert(u);
 
-         bool reverse_order = graph_view.node_metadata[ebg_node_id].is_reverse_geometry;
-         uint32_t offset = graph_view.node_metadata[ebg_node_id].geometry_offset;
-         uint32_t size = graph_view.node_metadata[ebg_node_id].geometry_size;
+         payload.total_duration_seconds += graph_view.node_metadata[u].wt;
+         payload.total_distance_meters += graph_view.node_metadata[u].distance_meters;
+
+         bool reverse_order = graph_view.node_metadata[u].is_reverse_geometry;
+         uint32_t offset = graph_view.node_metadata[u].geometry_offset;
+         uint32_t size = graph_view.node_metadata[u].geometry_size;
 
          for (uint32_t j = 0; j < size; ++j) 
          {
              uint32_t index = reverse_order ? (offset + size - 1 - j) : (offset + j);
-            
-             // Create a [lon, lat] pair
-             Json::Value coord_pair(Json::arrayValue);
-             coord_pair.append(graph_view.coordinates[index].lon);
-             coord_pair.append(graph_view.coordinates[index].lat);
-             
-             // Append to the main coordinates array
-             coordinates.append(coord_pair);
+             //emplace back logic is here. instead if creating a temp obj we directly create the
+             //object in the vector space reserved
+             payload.route_geometry.emplace_back(graph_view.coordinates[index].lon, graph_view.coordinates[index].lat);
+         }
+
+         for(uint32_t e = graph_view.routing_head[u]; e < graph_view.routing_head[u+1]; ++e)
+         {
+             uint32_t v = graph_view.routing_edges[e].to;
+             unique_corridor_nodes.insert(v);
+             payload.corridor_edges.emplace_back(u, v);
          }
      }
-    
-     // Populate Feature Properties (Timing & Distance metadata)
-     Json::Value properties;
-     properties["name"] = "Route";
-     properties["duration_seconds"] = total_time_seconds;
-     properties["duration_string"] = formatDuration(total_time_seconds);
-     properties["distance_meters"] = total_distance_meters;
-     properties["distance_string"] = formatDistance(total_distance_meters);
 
-     feature["properties"] = properties;
+     payload.duration_string = formatDuration(payload.total_duration_seconds);
+     payload.distance_string = formatDistance(payload.total_distance_meters);
 
-     // 7. Assemble the JSON Hierarchy
-     geometry["coordinates"] = coordinates;
-     feature["geometry"] = geometry;
-    
-     Json::Value features(Json::arrayValue);
-     features.append(feature);
-    
-     geojson["features"] = features;
+     // Reserve bucket space for the final nodes hash map to prevent rehashing overhead
+     payload.corridor_nodes.reserve(unique_corridor_nodes.size());
 
-     return geojson;
+     for (uint32_t node_id : unique_corridor_nodes) 
+     {
+         CorridorNodeDTO node_dto;
+         const auto& meta = graph_view.node_metadata[node_id];
+         uint32_t offset = meta.geometry_offset;
+        
+         node_dto.lat = graph_view.coordinates[offset].lat;
+         node_dto.lon = graph_view.coordinates[offset].lon;
+        
+         if (meta.geometry_size > 1) 
+         {
+             double next_lat = graph_view.coordinates[offset + 1].lat;
+             double next_lon = graph_view.coordinates[offset + 1].lon;
+             node_dto.bearing = calculateBearing(node_dto.lat, node_dto.lon, next_lat, next_lon);
+         } 
+         else 
+         {
+             node_dto.bearing = 0.0;
+         }
+
+         payload.corridor_nodes[node_id] = node_dto;
+     }
+
+    return payload;
 }
 
 
-Json::Value getPathJson(uint32_t startNodeId,uint32_t destNodeId,const GraphDataView&data)
-{
-     std::vector<uint32_t> abstract_path;  
-
-     //auto start_math = std::chrono::high_resolution_clock::now();
-     multi_level_dijsktra(data,startNodeId,destNodeId,abstract_path);
-     //auto end_math = std::chrono::high_resolution_clock::now();
-
-     //auto start_json = std::chrono::high_resolution_clock::now();
-     Json::Value json=build_geojson_response(unpack_abstract_path(abstract_path,data),data) ;
-     //auto end_json = std::chrono::high_resolution_clock::now();
-
-     //auto math_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_math - start_math).count();
-     //auto json_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_json - start_json).count();
-
-     //std::cout<< "Route: " << startNodeId << " -> " << destNodeId<<"\n";
-     //std::cout<< "Pathfinding + Unpack Time: " << math_time << " ms\n";
-     //std::cout<< "JSON Serialization Time: " << json_time << " ms\n";
-     return json;//unpack_abstract_path(abstract_path,data)
-}
 /*
 //load all the data from the pre processed files
 void load_all_routing_data(const std::string& directory, RoutingData& data) 
