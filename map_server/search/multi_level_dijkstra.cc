@@ -365,7 +365,7 @@ std::string formatDistance(uint32_t meters)
      return std::string(buf);
 }
 
-//modular payload method shifted from previosu Json::Value method to enable swift integrationg of
+//modular payload method shifted from previous Json::Value method to enable swift integrationg of
 //protobuff later
 NavigationPayload extract_navigation_payload(const std::vector<uint32_t>& detailed_path, 
      const GraphDataView& graph_view) 
@@ -402,12 +402,17 @@ NavigationPayload extract_navigation_payload(const std::vector<uint32_t>& detail
      // A route node usually has 2-4 cross streets. Reserving this prevents hash map rehashing.
      unique_corridor_nodes.reserve(detailed_path.size() * 3); 
 
-     for (uint32_t u : detailed_path) 
+     // Use an index-based loop so we can look ahead to the next node
+     for (size_t i = 0; i < detailed_path.size(); ++i) 
      {
+         uint32_t u = detailed_path[i];
          if (u >= graph_view.total_nodes) 
          {
              continue;
          }
+
+         // Identify the next node in the sequence
+         uint32_t next_route_node = (i + 1 < detailed_path.size()) ? detailed_path[i + 1] : UINT32_MAX;
 
          // O(1) Insertion now because memory is pre-allocated
          payload.route_path_ids.push_back(u);
@@ -423,8 +428,6 @@ NavigationPayload extract_navigation_payload(const std::vector<uint32_t>& detail
          for (uint32_t j = 0; j < size; ++j) 
          {
              uint32_t index = reverse_order ? (offset + size - 1 - j) : (offset + j);
-             //emplace back logic is here. instead if creating a temp obj we directly create the
-             //object in the vector space reserved
              payload.route_geometry.emplace_back(graph_view.coordinates[index].lon, graph_view.coordinates[index].lat);
          }
 
@@ -432,7 +435,13 @@ NavigationPayload extract_navigation_payload(const std::vector<uint32_t>& detail
          {
              uint32_t v = graph_view.routing_edges[e].to;
              unique_corridor_nodes.insert(v);
-             payload.corridor_edges.emplace_back(u, v);
+             
+             //this is imp for the frontend viterbi to know if the corridor is even part
+             //of the route or not
+             bool is_route_path = (v == next_route_node);
+             
+             // Pass the boolean flag to the constructor
+             payload.corridor_edges.emplace_back(u, v, is_route_path); 
          }
      }
 

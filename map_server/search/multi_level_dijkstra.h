@@ -58,6 +58,7 @@ struct CorridorEdgeDTO
 {
       uint32_t from;
       uint32_t to;
+      bool isRoute;
 };
 
 // The Master DTO
