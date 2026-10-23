@@ -36,3 +36,6 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 
 # Compile it (this might take slightly longer due to Link-Time Optimization)
 make -j$(nproc)
+
+curl -v "http://10.226.104.143:8080/api/route?start_lat=22.4793277&start_lon=88.3051334&dest_lat=19.1742&dest_lon=72.9579&compass=251.12619040353894"
+

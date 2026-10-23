@@ -15,7 +15,7 @@ drogon::Task<drogon::HttpResponsePtr> SearchController::getRoute(drogon::HttpReq
          //call to service 
          Json::Value geoJson = normal_routing(start_lat, start_lon, dest_lat, dest_lon,compass);
 
-          auto resp = drogon::HttpResponse::newHttpJsonResponse(geoJson);
+         auto resp = drogon::HttpResponse::newHttpJsonResponse(geoJson);
 
          // Return the response using C++20 coroutine syntax
          co_return resp;

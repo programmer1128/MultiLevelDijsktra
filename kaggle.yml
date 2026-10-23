@@ -1,0 +1,10 @@
+project: mapengine-1
+kernel_slug: aritracoder/mapengine-1
+code_file: pre_processing/preprocess.ipynb
+accelerator: none
+internet: false
+privacy: private
+datasets: []
+competitions: []
+outputs:
+  download_to: .kaggle-outputs/
