@@ -10,7 +10,7 @@
 #include<bits/stdc++.h>
 #include <osmium/index/map/sparse_mem_array.hpp>
 #include <osmium/handler/node_locations_for_ways.hpp>
-#include "/home/aritra/MultiLevelDijsktra/include/GraphStructures.hpp"
+#include "include/GraphStructures.hpp"
 
 // --- Data Structures ---
 
